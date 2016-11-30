@@ -377,6 +377,7 @@ void sr_handlepacket_ip(struct sr_instance* sr,
 	char* interface)
 {
 	sr_ip_hdr_t* ip_header = (sr_ip_hdr_t*)(packet+sizeof(sr_ethernet_hdr_t));
+	sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *)packet;
  /*TODO: make sure its a valid ip  packet */
 
 	if(ip_header->ip_sum != cksum(ip_header, ip_header->ip_hl * 4))
@@ -391,12 +392,13 @@ void sr_handlepacket_ip(struct sr_instance* sr,
 			sent_to_us = 1;
 		inter = inter->next;
 	}
-	if(sent_to_us == 1) {
 		ip_header->ip_ttl--;
 		if(ip_header->ip_ttl == 0) {
 			sr_create_icmp_message(sr, 11, 0, packet, len, sr_get_interface(sr, interface));
 			return;		
 		}
+	if(sent_to_us == 1) {
+		
 		sr_icmp_t3_hdr_t *icmp_header;
 		switch(ip_header->ip_p) {
 		case 1: 
@@ -415,7 +417,22 @@ void sr_handlepacket_ip(struct sr_instance* sr,
 		}
 	}
 	else { /** forward the packet because its not ours **/
-
+		struct sr_rt *next_hop /*=sr_longest_prefix_match(sr, ip_header->ip_dst)*/; /** find longest prefix match**/
+		if(next_hop == NULL) {
+			sr_create_icmp_message(sr, 3, 0,packet, len, sr_get_interface(sr, interface));
+			return;
+		}
+		struct sr_arpentry *arp_cached = sr_arpcache_lookup(&(sr->cache),(next_hop->dest).s_addr);
+		if(!arp_cached) { /*do arp request */ 
+			sr_waitforarp(sr, packet, len, (next_hop->dest).s_addr, sr_get_interface(sr, next_hop->interface));
+		}		
+		else {
+			struct sr_if *inter_out = sr_get_interface(sr, interface);
+			memcpy(ethernet_header->ether_shost, inter_out->addr, sizeof(char)* ETHER_ADDR_LEN);
+			memcpy(ethernet_header->ether_dhost, arp_cached->mac, sizeof(char)* ETHER_ADDR_LEN);;
+			sr_send_packet(sr, packet, len, (char *)malloc(sizeof(char) *sr_IFACE_NAMELEN));
+			free(arp_cached);
+		}
 	}
 	/*TODO: handle if packet is to be forwarded*/	
 

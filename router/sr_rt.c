@@ -176,8 +176,20 @@ void sr_print_routing_entry(struct sr_rt* entry)
     printf("%s\n",entry->interface);
 
 } /* -- sr_print_routing_entry -- */
+struct sr_rt* sr_longest_prefix_match(struct sr_instance *sr, uint32_t ip) {
 
-void sr_longest_prefix_match(struct sr_instance *sr) {
-
-	
+	struct sr_rt* interface;
+	struct sr_rt* current;
+	uint32_t mask = 0;
+	while(current) {
+		uint32_t current_ip = (current->dest).s_addr;
+		if(current_ip == (ip & (current->mask).s_addr)) {
+			if((ip & (current->mask).s_addr) > mask) {
+				mask= (current->mask).s_addr;
+				interface = current;
+			}	
+		}
+		current = current->next;	
+	}
+	return interface;
 }

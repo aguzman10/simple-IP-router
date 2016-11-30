@@ -417,7 +417,7 @@ void sr_handlepacket_ip(struct sr_instance* sr,
 		}
 	}
 	else { /** forward the packet because its not ours **/
-		struct sr_rt *next_hop /*=sr_longest_prefix_match(sr, ip_header->ip_dst)*/; /** find longest prefix match**/
+		struct sr_rt *next_hop =sr_longest_prefix_match(sr, ip_header->ip_dst); /** find longest prefix match**/
 		if(next_hop == NULL) {
 			sr_create_icmp_message(sr, 3, 0,packet, len, sr_get_interface(sr, interface));
 			return;

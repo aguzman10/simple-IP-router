@@ -167,14 +167,42 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req,
   {
     if (req->times_sent >= 5)
     {
+	
+	struct sr_packet *current;
+	current = req->packets;
+	while(current != NULL) {
+		uint8_t * header_buffer = (uint8_t)malloc(size(sr_icmp_t3_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_ethernet_hdr_t));
+		memcpy(header_buffer, current->buf, sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+		//CREATE ICMP
+		sr_icmp_t3_hdr_t * icmp_header = (sr_icmp_t3_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+		icmp_header->icmp_code = 1;
+		icmp_header->icmp_type = 3;
+		icmp_header->icmp_sum = 0;
+		icmp_header->next_mtu = IP_MAXPACKET;
+		icmp_header->icmp_sum = cksum(icmp_header, current->len - sizeof(sr_ethernet_hdr_t) - sizeof(sr_ip_hdr_t));  
+		//FIX IP PACKET
+		sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t));
+		ip_header->ip_dst = ip_header->ip_src;
+		ip_header ->ip_p = htons(ip_protocol_icmp);		
+		char* interface_name = (char *)(malloc(sizeof(char) * sr_IFACE_NAMELEN);
+		struct sr_if *current_interface = sr_get_interface(sr, iface_name);
+		ip_header->ip_src = current_interface->ip;
+		ip_header->sum = cksum(ip_header, ip_header->ip_h1 * 4)//should be * 4 but not sure
+		//UPDATE ETHERNET FRAME
+		sr_ethernet_hdr_t * ethernet_header = (sr_ethernet_hdr_t *)(header_buffer);
+		memcpy(ethernet_header->ether_dhost, ethernet_header->ether_shost, sizeof(uint8_t) * ETHER_ADDR_LEN);
+		memcpy(ethernet_header->ether_shost, current_interface->addr, sizeof(unsigned char) * ETHER_ADDR_LEN);
+		ethernet_header->ether_type = htons(ethertype_ip);
+		sr_send_packet(sr, header_buffer, buffer_size, interface_name);
+		free(header_buffer);
+		free(interface_name);
+		//free more things?
+		current = current->next;	
+		
+	}
       /*********************************************************************/
       /* TODO: send ICMP host uncreachable to the source address of all    */
-      /* packets waiting on this request                                   */
-
-
-
-
-      /*********************************************************************/
+     /* packets waiting on this request         */
 
       sr_arpreq_destroy(&(sr->cache), req);
     }

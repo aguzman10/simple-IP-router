@@ -394,22 +394,24 @@ void sr_handlepacket_ip(struct sr_instance* sr,
 	if(sent_to_us == 1) {
 		ip_header->ip_ttl--;
 		if(ip_header->ip_ttl == 0) {
-			create_icmp_message(sr, 11, 0, packet, len, sr_get_interface(sr, interface);
+			sr_create_icmp_message(sr, 11, 0, packet, len, sr_get_interface(sr, interface));
 			return;		
 		}
+		sr_icmp_t3_hdr_t *icmp_header;
 		switch(ip_header->ip_p) {
-		case ip_protocol_icmp: 
-			sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *)(packet + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
-			if(icmp_header->icmp_type==icmp_echo_req && icmp_header->icmp_sum == cksum(icmp_header, len - sizeof(sr_ethernet_hdr_t)-sizeof(sr_ip_hdr_t)))
-				create_icmp_message(sr, icmp_echo_reply, 0, packet, len, sr_get_interface(sr, interface));
+		case 1: 
+			icmp_header = (sr_icmp_t3_hdr_t *)(packet + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			if(icmp_header->icmp_type==8&& icmp_header->icmp_sum == cksum(icmp_header, len - sizeof(sr_ethernet_hdr_t)-sizeof(sr_ip_hdr_t)))
+				sr_create_icmp_message(sr, 8, 0, packet, len, sr_get_interface(sr, interface));
 		break;
-		case ip_protocol_udp:
-			create_icmp_message(sr, 3, 3, packet, len, sr_get_interface(sr, interface));
+		case 17:
+			sr_create_icmp_message(sr, 3, 3, packet, len, sr_get_interface(sr, interface));
 			break;
-		case ip_protocol_tcp:
-			create_icmp_message(sr, 3, 3, packet, len, sr_get_interface(sr, interface));
+		case 6:
+			sr_create_icmp_message(sr, 3, 3, packet, len, sr_get_interface(sr, interface));
 			break;
 		default:
+			break;
 		}
 	}
 	else { /** forward the packet because its not ours **/

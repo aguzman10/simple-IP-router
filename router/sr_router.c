@@ -316,13 +316,15 @@ void sr_handlepacket_arp(struct sr_instance *sr, uint8_t *pkt,
 void sr_create_icmp_message(struct sr_instance *sr, int type, int code, uint8_t *packet, int len, struct sr_if intreface) {
 	uint8_t *header_buffer;
 	int size;
+	sr_icmp_t3_hdr_t *icmp_header;
 	switch(type) {
 		case 3:
 		case 11:
 			size = sizeof(sr_icmp_t3_hdr_t);
 			header_buffer = (uint8_t*)malloc(sizeof(sr_icmp_t3_hdr_t)+sizeof(sr_ip_hdr_t));
 			memcpy(header_buffer, packet, sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
-			sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *)(header_buffer +sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+
+			icmp_header = (sr_icmp_t3_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
 			icmp_header->icmp_code = code;
 			icmp_header->icmp_type = type;
 			icmp_header->next_mtu = IP_MAXPACKET;
@@ -332,21 +334,23 @@ void sr_create_icmp_message(struct sr_instance *sr, int type, int code, uint8_t 
 		case 0: 
 			header_buffer = (uint8_t*)malloc(len);
 			memcpy(header_buffer,packet,len);
-			sr_icmp_hdr_t *icmp_header = (sr_icmp_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			icmp_header = (sr_icmp_t3_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));	
 			icmp_header->icmp_code = code;
 			icmp_header->icmp_type = type;
 			icmp_header->icmp_sum = cksum(icmp_header, sizeof(sr_icmp_hdr_t));
+			size = len - (sizeof(sr_ip_hdr_t)+sizeof(sr_ethernet_hdr_t));
 			break;
 		default:
 			size = sizeof(sr_icmp_hdr_t);
 			header_buffer = (uint8_t*)malloc(sizeof(sr_icmp_hdr_t)+sizeof(sr_ip_hdr_t)+sizeof(sr_ethernet_hdr_t));
 			memcpy(header_buffer, packet, sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
-			sr_icmp_hdr_t *icmp_header = (sr_icmp_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			icmp_header = (sr_icmp_t3_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
 			icmp_header->icmp_type = type;
 			icmp_header->icmp_code = code;
 			icmp_header->icmp_sum = cksum(icmp_header, sizeof(sr_icmp_hdr_t));	 	
 			break;
 	}
+	
 	
 }
 

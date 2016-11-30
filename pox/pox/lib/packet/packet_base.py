@@ -1,17 +1,20 @@
 # Copyright 2011 James McCauley
 # Copyright 2008 (C) Nicira, Inc.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file is derived from the packet library in NOX, which was
 # developed by Nicira, Inc.
@@ -95,48 +98,13 @@ class packet_base (object):
         return len(self.pack())
 
     def __str__(self):
-        if hasattr(self, "_to_str"):
-          try:
-            return self._to_str()
-          except Exception as e:
-            #import traceback
-            #traceback.print_exc()
-            lg.debug("str(%s): %s" % (self.__class__.__name__, e))
-          return "[%s:Bad representation]" % (self.__class__.__name__,)
-        return "[%s l:%i%s]" % (self.__class__.__name__, len(self),
-            "" if self.next else " *")
-
-    def dump(self):
-        p = self
-        m = []
-        while p is not None:
-          if not isinstance(p, packet_base):
-            if isinstance(p, bytes):
-              if len(p) == 0:
-                m.append("[0 bytes]")
-                break
-              s = ''
-              for t in range(min(len(p), 5)):
-                s += "%02x " % (ord(p[t]),)
-              if len(p) > 5: s += "..."
-              s = s.rstrip()
-              m.append("[%s bytes: " % (len(p),) + s + "]")
-              break
-            try:
-              l = len(p)
-              m.append("[%s l:%i]" % (p.__class__.__name__, l))
-            except:
-              m.append("[%s]" % (p.__class__.__name__,))
-            break
-          m.append(str(p))
-          p = p.next
-        return "".join(m)
+        return "%s: Undefined representation" % self.__class__.__name__
 
     def find(self, proto):
         """
         Find the specified protocol layer based on its class type or name.
         """
-        if not isinstance(proto, basestring):
+        if not isinstance(proto, str):
             proto = proto.__name__
         if self.__class__.__name__ == proto and self.parsed:
             return self
@@ -191,9 +159,6 @@ class packet_base (object):
 
     def pack(self):
         '''Convert header and payload to bytes'''
-
-        if self.parsed is False and self.raw is not None and self.next is None:
-          return self.raw
 
         self.pre_hdr()
 

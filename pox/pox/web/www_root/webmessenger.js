@@ -1,176 +1,63 @@
 /*************************************************************************
-Copyright 2011,2012 James McCauley
+Copyright 2011 James McCauley
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at:
+This file is part of POX.
 
-    http://www.apache.org/licenses/LICENSE-2.0
+POX is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+POX is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with POX.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
-/*
-This is a little API for communicating with POX's webmessenger
-component.  It's pretty awful.  One can do MUCH better with
-some better JS, especially with a class framework like qooxdoo.
-
-It also could use some improvements (and some corresponding
-improvements to the webmessenger).  In particular, it currently
-*detects* various problems, but provides no way to recover from
-them.
-
-Please feel free to contribute improvements!
-*/
-
-function MessengerChannel (messenger, channelName, config)
+// This class communicates with POX's webmessenger component.
+// It could be improved (especially with some tweaks to
+// webmessenger.  Feel free to contribute improvements. :)
+// (In particular, it currently *detects* problems, but does
+// not recover from them.)
+function WebMessenger (callback, urlBase, user, password)
 {
-  this._channelName = channelName;
-  this._messenger = messenger;
-  this.on_rx = function (data)
-  {
-    if (console) console.log("Channel " + this._channelName
-                             + "rx: " + JSON.stringify(data));
-  };
-  this.on_disconnect = function () {};
-
-  if (config)
-  {
-    if (config.on_rx) this.on_rx = config.on_rx;
-    if (config.on_disconnect) this.on_disconnect = config.on_disconnect;
-  }
-
-  this.send = function (msg)
-  {
-    // Should probably copy this before sending, but whatever.
-    msg['CHANNEL'] = this._channelName;
-    this._messenger.send();
-  };
-}
-
-function WebMessenger (url, user, password, on_connect, on_disconnect, on_rx)
-{
-
-  this._reset = function ()
-  {
-    this._ses = null;
-    this._rx_seq = null;
-    this._tx_seq = 100;
-    this._stopped = false;
-  };
-
-  var autorestart;
-  if (typeof(url) != 'string' && typeof(url) != 'undefined')
-  {
-    user = url.user || user;
-    password = url.password || password;
-    on_connect = url.on_connect || on_connect;
-    on_disconnect = url.on_disconnect || on_disconnect;
-    on_rx = url.on_rx || on_rx;
-    autorestart = url.autorestart;
-    url = url.url;
-  }
-
-  this._reset();
-
-  this._channels = {};
-
-  /*
   this._ses = null;
   this._rx_seq = null;
   this._tx_seq = 100;
   this._stopped = false;
-  */
 
-  if (!url) url = "/_webmsg";
-  if (url[url.length-1] != "/") url += "/";
-  this._urlBase = url;
+  if (!urlBase) urlBase = "/_webmsg";
+  if (urlBase[urlBase.length-1] != "/") urlBase += "/";
+  this._urlBase = urlBase
   this._auth = [user, password];
 
   this._output = []; // Queue of outgoing data
   this._output_pending = false;
   this._poll_pending = false;
 
-  this.autorestart = !!autorestart;
-  this._restart_pending = false;
-
-  this.stop = function (can_restart)
+  this.stop = function (data)
   {
     this._stopped = true;
     if (this._timer) clearInterval(this._timer);
     this._timer = null;
     //TODO: Abort pending connections
+  };
 
-    if (can_restart && this.autorestart && !this._restart_pending)
+  if (callback)
+  {
+    this.process = callback
+  }
+  else
+  {
+    this.process = function (data)
     {
-      this._restart_pending = true;
-      var self = this;
-      setTimeout(function () { self.connect(); }, 5000);
-      //TODO: use the timer as _restart_pending (and cancel later)
-    }
-  };
-
-  this.get_channel = function (channel, extra, channel_config)
-  {
-    if (channel in this._channels)
-    {
-      if (console) console.log("Ignored extra join info");
-      return this._channels[channel];
-    }
-
-    var join = {'CHANNEL':'','cmd':'join_channel','channel':channel};
-    for (var x in extra) join[x] = extra[x];
-    this.send(join);
-    var chan = new MessengerChannel(this, channel, channel_config);
-    this._channels[channel] = chan;
-    return chan;
-  };
-
-  this.process = function (data)
-  {
-    // You probably want to overload this...
-    if ('CHANNEL' in data && data.CHANNEL in this._channels)
-    {
-      this._channels[data.CHANNEL].on_rx(data);
-    }
-    else
-    {
-      this.on_rx(data);
-    }
-  };
-
-  this.on_connect = function (session_id)
-  {
-    if (console) console.log("Connect: Session " + session_id);
-  };
-  if (on_connect) this.on_connect = on_connect;
-  this.on_disconnect = function (msg, stat)
-  {
-    if (!this.autorestart) alert(msg);
-  };
-  if (on_disconnect) this.on_disconnect = on_disconnect;
-  this.on_rx = function (data)
-  {
-    if (console) console.log("on_rx: " + JSON.stringify(data));
-  };
-  if (on_rx) this.on_rx = on_rx;
-
-  this._do_disconnect = function (msg, stat)
-  {
-    if (console) console.log("Disconnect: " + msg);
-    for (var c in this._channels)
-    {
-      c = this._channels[c];
-      c.on_disconnect(msg, stat);
-      //try { c.on_disconnect(msg); } catch (e) { };
-    }
-    //try { this.on_disconnect(msg); } catch (e) { };
-    this.on_disconnect(msg, stat);
-  };
+      // You probably want to overload this...
+      if (console) console.log("Recv: " + JSON.stringify(data));
+    };
+  }
 
   this._nextTXSeq = function ()
   {
@@ -188,28 +75,23 @@ function WebMessenger (url, user, password, on_connect, on_disconnect, on_rx)
     if (req.readyState !== 4) return;
     if (req.status != 200)
     {
-      //if (req.status !== 0)
+      if (req.status !== 0)
       {
-        this._do_disconnect("Communication error (status " + req.status + ")", req.status);
+        alert("Communication error (status " + req.status + ")");
       }
-      this.stop(true);
+      this.stop();
       return;
     }
     var sendPoll = req.isPoll || (this._ses === null);
 
     var data = JSON.parse(req.responseText);
-    if (this._ses === null && console)
-    {
-      //console.log("Session: " + data.ses);
-      this._restart_pending = false;
-      this.on_connect(data.ses);
-    }
+    if (this._ses === null && console) console.log("Session: " + data.ses);
     if (this._ses === null) this._ses = data.ses;
     if (data.ses !== this._ses)
     {
       // Strange!
-      this.stop(true);
-      this._do_disconnect("Communication error (bad ses)", -1);
+      this.stop();
+      alert("Communication error (bad ses)");
       return;
     }
     if (req.isPoll)
@@ -219,8 +101,8 @@ function WebMessenger (url, user, password, on_connect, on_disconnect, on_rx)
       {
         //alert(data.seq + " " + this._rx_seq);
         // Might want to buffer, but for now...
-        this.stop(true);
-        this._do_disconnect("Communication error (bad seq)", -2);
+        this.stop();
+        alert("Communication error (bad seq)");
         return;
       }
       if (this._rx_seq === 0x7FffFFff)
@@ -338,12 +220,8 @@ function WebMessenger (url, user, password, on_connect, on_disconnect, on_rx)
   {
     // Kick it off by sending a dummy message.
     // The response is where we get our session key.
-    if (console) console.log("Connecting...");
-    this._reset();
     this._sendKeepAlive();
-    this._restart_pending = false;
     var self = this;
-    this._timer = setInterval(function (){ self._handleKeepAliveTimer(); },
-                              60*1000);
+    this._timer = setInterval(function () { self._handleKeepAliveTimer(); }, 60*1000);
   };
 }

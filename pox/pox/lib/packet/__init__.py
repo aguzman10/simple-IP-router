@@ -1,17 +1,3 @@
-# Copyright 2011,2013 James McCauley
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """
 The POX packet library for packet parsing and creation.
 
@@ -30,15 +16,12 @@ import dns as DNS
 import eap as EAP
 import eapol as EAPOL
 import ethernet as ETHERNET
-import ipv4 as IPV4
-import ipv6 as IPV6
 import icmp as ICMP
-import icmpv6 as ICMPV6
+import ipv4 as IPV4
 import lldp as LLDP
 import tcp as TCP
 import udp as UDP
 import vlan as VLAN
-import mpls as MPLS
 
 from arp import *
 from dhcp import *
@@ -46,15 +29,12 @@ from dns import *
 from eap import *
 from eapol import *
 from ethernet import *
-from ipv6 import *
-from ipv4 import *
-from icmpv6 import *
 from icmp import *
+from ipv4 import *
 from lldp import *
 from tcp import *
 from udp import *
 from vlan import *
-from mpls import *
 
 __all__ = [
   'arp',
@@ -63,16 +43,13 @@ __all__ = [
   'eap',
   'eapol',
   'ethernet',
-  'ipv4',
-  'ipv6',
   'icmp',
-  'icmpv6',
+  'ipv4',
   'lldp',
   'tcp',
   'tcp_opt',
   'udp',
   'vlan',
-  'mpls',
 
   'ARP',
   'DHCP',
@@ -80,13 +57,10 @@ __all__ = [
   'EAP',
   'EAPOL',
   'ETHERNET',
-  'IPV4',
-  'IPV6',
   'ICMP',
-  'ICMPV6',
+  'IPV4',
   'LLDP',
   'TCP',
   'UDP',
   'VLAN',
-  'MPLS',
 ]

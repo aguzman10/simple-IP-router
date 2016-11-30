@@ -1,17 +1,20 @@
 # Copyright 2011 James McCauley
 # Copyright 2008 (C) Nicira, Inc.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file is derived from the packet library in NOX, which was
 # developed by Nicira, Inc.
@@ -59,17 +62,6 @@ _type_to_name = {
     11  : "TIME_EXCEED",
 }
 
-
-# This is such a hack; someone really needs to rewrite the
-# stringizing.
-def _str_rest (s, p):
-  if p.next is None:
-    return s
-  if isinstance(p.next, basestring):
-    return "[%s bytes]" % (len(p.next),)
-  return s+str(p.next)
-
-
 #----------------------------------------------------------------------
 #
 #  Echo Request/Reply
@@ -101,7 +93,7 @@ class echo(packet_base):
         self._init(kw)
 
     def __str__(self):
-        return "[ICMP id:%i seq:%i]" % (self.id, self.seq)
+        return "{id:%i seq:%i}" % (self.id, self.seq)
 
     def parse(self, raw):
         assert isinstance(raw, bytes)
@@ -141,7 +133,6 @@ class unreach(packet_base):
     MIN_LEN = 4
 
     def __init__(self, raw=None, prev=None, **kw):
-        packet_base.__init__(self)
 
         self.prev = prev
 
@@ -154,17 +145,19 @@ class unreach(packet_base):
         self._init(kw)
 
     def __str__(self):
-        s = ''.join(('[', 'm:', str(self.next_mtu), ']'))
+        s = ''.join(('{', 'm:', str(self.next_mtu), '}'))
 
-        return _str_rest(s, self)
+        if self.next is None:
+            return s
+
+        return ''.join((s, str(self.next)))
 
     def parse(self, raw):
         assert isinstance(raw, bytes)
         self.raw = raw
         dlen = len(raw)
         if dlen < self.MIN_LEN:
-            self.msg('(unreach parse) warning unreachable payload too short '
-                     'to parse header: data len %u' % dlen)
+            self.msg('(unreach parse) warning unreachable payload too short to parse header: data len %u' % dlen)
             return
 
         (self.unused, self.next_mtu) \
@@ -189,7 +182,6 @@ class icmp(packet_base):
     MIN_LEN = 4
 
     def __init__(self, raw=None, prev=None, **kw):
-        packet_base.__init__(self)
 
         self.prev = prev
 
@@ -204,8 +196,12 @@ class icmp(packet_base):
 
     def __str__(self):
         t = _type_to_name.get(self.type, str(self.type))
-        s = '[t:%s c:%i chk:%x]' % (t, self.code, self.csum)
-        return _str_rest(s, self)
+        s = '{t:%s c:%i chk:%x}' % (t, self.code, self.csum)
+
+        if self.next is None:
+            return s
+
+        return ''.join((s, str(self.next)))
 
     def parse(self, raw):
         assert isinstance(raw, bytes)

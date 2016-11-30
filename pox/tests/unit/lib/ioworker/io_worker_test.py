@@ -1,31 +1,15 @@
 #!/usr/bin/env python
-#
-# Copyright 2011-2012 Andreas Wundsam
-# Copyright 2011-2012 Colin Scott
-# Copyright 2011-2013 James McCauley
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+### auto generate sha1: 26c6550c27d0274b9338b2b85891aeaf01146ed8
 
 import itertools
 import os.path
 import sys
 import unittest
 
-sys.path.append(os.path.join(os.path.dirname(__file__),
-    *itertools.repeat("..", 3)))
+sys.path.append(os.path.join(os.path.dirname(__file__), *itertools.repeat("..", 3)))
 
 from pox.lib.mock_socket import MockSocket
-from pox.lib.ioworker import IOWorker, RecocoIOLoop
+from pox.lib.ioworker.io_worker import IOWorker, RecocoIOLoop
 from nose.tools import eq_
 
 class IOWorkerTest(unittest.TestCase):
@@ -41,8 +25,8 @@ class IOWorkerTest(unittest.TestCase):
     i = IOWorker()
     self.data = None
     def d(worker):
-      self.data = worker.peek()
-    i.rx_handler = d
+      self.data = worker.peek_receive_buf()
+    i.set_receive_handler(d)
     i._push_receive_data("bar")
     self.assertEqual(self.data, "bar")
     # d does not consume the data
@@ -53,9 +37,9 @@ class IOWorkerTest(unittest.TestCase):
     i = IOWorker()
     self.data = None
     def consume(worker):
-      self.data = worker.peek()
+      self.data = worker.peek_receive_buf()
       worker.consume_receive_buf(len(self.data))
-    i.rx_handler = consume
+    i.set_receive_handler(consume)
     i._push_receive_data("bar")
     self.assertEqual(self.data, "bar")
     # data has been consumed
@@ -67,7 +51,7 @@ class RecocoIOLoopTest(unittest.TestCase):
   def test_basic(self):
     loop = RecocoIOLoop()
     (left, right) = MockSocket.pair()
-    loop.new_worker(left)
+    loop.create_worker_for_socket(left)
 
   def test_stop(self):
     loop = RecocoIOLoop()
@@ -76,16 +60,15 @@ class RecocoIOLoopTest(unittest.TestCase):
   def test_run_read(self):
     loop = RecocoIOLoop()
     (left, right) = MockSocket.pair()
-    worker = loop.new_worker(left)
+    worker = loop.create_worker_for_socket(left)
 
     # callback for ioworker to record receiving
     self.received = None
     def r(worker):
-      self.received = worker.peek()
-    worker.rx_handler = r
+      self.received = worker.peek_receive_buf()
+    worker.set_receive_handler(r)
 
-    # 'start' the run (dark generator magic here).
-    # Does not actually execute run, but 'yield' a generator
+    # 'start' the run (dark generator magic here). Does not actually execute run, but 'yield' a generator
     g = loop.run()
     # g.next() will call it, and get as far as the 'yield select'
     select = g.next()
@@ -103,28 +86,24 @@ class RecocoIOLoopTest(unittest.TestCase):
   def test_run_close(self):
     loop = RecocoIOLoop()
     (left, right) = MockSocket.pair()
-    worker = loop.new_worker(left)
+    worker = loop.create_worker_for_socket(left)
 
-    self.assertFalse(worker in loop._workers,
-        "Should not add to _workers yet, until we start up the loop")
-    self.assertTrue(len(loop._pending_commands) == 1,
-        "Should have added pending create() command")
+    self.assertFalse(worker in loop._workers,  "Should not add to _workers yet, until we start up the loop")
+    self.assertTrue(loop._pending_commands.qsize() == 1, "Should have added pending create() command")
     worker.close()
     # This causes the worker to be scheduled to be closed -- it also 
     # calls pinger.ping(). However, the Select task won't receive the ping
     # Until after this method has completed! Thus, we only test whether
     # worker has been added to the pending close queue
-    self.assertTrue(len(loop._pending_commands) == 2,
-        "Should have added pending close() command")
+    self.assertTrue(loop._pending_commands.qsize() == 2, "Should have added pending close() command")
 
   def test_run_write(self):
     loop = RecocoIOLoop()
     (left, right) = MockSocket.pair()
-    worker = loop.new_worker(left)
+    worker = loop.create_worker_for_socket(left)
 
     worker.send("heppo")
-    # 'start' the run (dark generator magic here).
-    # Does not actually execute run, but 'yield' a generator
+    # 'start' the run (dark generator magic here). Does not actually execute run, but 'yield' a generator
     g = loop.run()
     # g.next() will call it, and get as far as the 'yield select'
     select = g.next()
@@ -134,3 +113,4 @@ class RecocoIOLoopTest(unittest.TestCase):
 
     # that should result in the stuff being sent on the socket
     self.assertEqual(right.recv(), "heppo")
+

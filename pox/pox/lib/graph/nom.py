@@ -1,16 +1,19 @@
 # Copyright 2012 James McCauley
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 """
@@ -24,7 +27,7 @@ class EntityEvent (Event):
   def __init__ (self, entity):
     Event.__init__(self)
     self.entity = entity
-
+    
 class EntityJoin (EntityEvent):
   """
   An entity has been added.
@@ -39,7 +42,7 @@ class EntityJoin (EntityEvent):
 
 class EntityLeave (EntityEvent):
   """
-  An entity has been removed
+  An entity has been removed 
 
   Note that if there is a more specific leave event defined for a particular
   entity, (e.g., SwitchLeave), this event will not be fired.
@@ -58,10 +61,10 @@ class Update (Event):
     self.event = event
 
 class Entity (Node):
-  """
-  Note that the Entity class is intentionally simple; It only serves as a
+  """ 
+  Note that the Entity class is intentionally simple; It only serves as a 
   convenient SuperClass type.
-
+  
   It's up to subclasses to implement specific functionality (e.g.
   OpenFlow1.0 switch functionality).  The purpose of this design decision
   is to prevent protocol specific details from being leaked into this
@@ -98,7 +101,7 @@ class NOM (Graph, EventMixin):
 
     Update
   ]
-
+  
   def __init__ (self):
     Graph.__init__(self)
     EventMixin.__init__(self)
@@ -152,3 +155,4 @@ class NOM (Graph, EventMixin):
 
   def __str__(self):
     return "<%s len:%i>" % (self.__class__.__name__, len(self))
+

@@ -1,17 +1,3 @@
-# Copyright 2011 James McCauley
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import logging
 from logging.handlers import *
 
@@ -59,13 +45,10 @@ def launch (__INSTANCE__ = None, **kw):
   logging.Formatter instance for all loggers created with that invocation
   of the log module.  If no loggers are created with this instantiation,
   it is used for the default logger.
-  If a --format is specified, you can also specify a --datefmt="<str>"
-  where the string is a strftime format string for date/time stamps.
   """
 
   if 'format' in kw:
-    df = kw.pop("datefmt", None)
-    formatter = logging.Formatter(kw['format'], datefmt=df)
+    formatter = logging.Formatter(kw['format'])
     del kw['format']
     if len(kw) == 0:
       # Use for the default logger...
@@ -94,7 +77,7 @@ def launch (__INSTANCE__ = None, **kw):
     use_kw = k.startswith("*")
     if use_kw: k = k[1:]
     k = k.lower()
-    if k == "no_default" and v:
+    if k == "no-default" and v:
       import pox.core
       logging.getLogger().removeHandler(pox.core._default_log_handler)
       logging.getLogger().addHandler(logging.NullHandler())

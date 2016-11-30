@@ -1,17 +1,20 @@
 # Copyright 2011 James McCauley
 # Copyright 2008 (C) Nicira, Inc.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file is derived from the packet library in NOX, which was
 # developed by Nicira, Inc.
@@ -59,9 +62,11 @@ class vlan(packet_base):
         self._init(kw)
 
     def __str__(self):
-        s = "[VLAN vlan={0} pcp={1} ether={2}]".format(self.id, self.pcp,
-            ethtype_to_str(self.eth_type))
-        return s
+        s = "vlan={0} pcp={1} ether={2}".format(self.id, self.pcp,
+                                                ethtype_to_str(self.eth_type))
+        if self.next is None:
+            return s
+        return s + "|" + str(self.next)
 
     def parse(self, raw):
         assert isinstance(raw, bytes)
@@ -75,31 +80,21 @@ class vlan(packet_base):
         (pcpid, self.eth_type) = struct.unpack("!HH", raw[:vlan.MIN_LEN])
 
         self.pcp = pcpid >> 13
-        self.cfi = pcpid  & 0x1000
+        self.c   = pcpid  & 0x1000
         self.id  = pcpid  & 0x0fff
 
         self.parsed = True
 
-        self.next = ethernet.parse_next(self,self.eth_type,raw,vlan.MIN_LEN)
+        # Don't know what to do about a VLAN'd VLAN...
+        assert self.eth_type != 0x8100
 
-    @property
-    def effective_ethertype (self):
-      return ethernet._get_effective_ethertype(self)
+        if self.eth_type in ethernet.type_parsers:
+            self.next = ethernet.type_parsers[self.eth_type]\
+             (raw=raw[vlan.MIN_LEN:],prev=self)
 
-    @property
-    def type (self):
-        """
-        This is just an alias for eth_type.
-
-        It's annoying that the ethertype on an ethernet packet is in the
-        'type' attribute, and for vlan it's in the 'eth_type' attribute.
-        We should probably normalize this. For now, we at least have this.
-        """
-        return self.eth_type
-
-    def hdr (self, payload):
+    def hdr(self, payload):
         pcpid  = self.pcp << 13
-        pcpid |= self.cfi << 12
+        pcpid |= self.c   << 12
         pcpid |= self.id
         buf = struct.pack("!HH", pcpid, self.eth_type)
         return buf

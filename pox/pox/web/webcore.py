@@ -1,16 +1,19 @@
-# Copyright 2011,2012 James McCauley
+# Copyright 2011 James McCauley
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 Webcore is a basic web server framework based on the SocketServer-based
@@ -49,25 +52,22 @@ import random
 import hashlib
 import base64
 
+#from pox.messenger.messenger import MessengerConnection
+
 from pox.core import core
 
 import os
 import posixpath
 import urllib
 import cgi
-import errno
+import shutil
+import mimetypes
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
 
 log = core.getLogger()
-try:
-  weblog = log.getChild("server")
-except:
-  # I'm tired of people running Python 2.6 having problems with this.
-  #TODO: Remove this someday.
-  weblog = core.getLogger("webcore.server")
 
 def _setAttribs (parent, child):
   attrs = ['command', 'request_version', 'close_connection',
@@ -79,7 +79,6 @@ def _setAttribs (parent, child):
   setattr(child, 'parent', parent)
 
 import SimpleHTTPServer
-from SimpleHTTPServer import SimpleHTTPRequestHandler
 
 
 class SplitRequestHandler (BaseHTTPRequestHandler):
@@ -126,22 +125,15 @@ class SplitRequestHandler (BaseHTTPRequestHandler):
     return method()
 
   def log_request (self, code = '-', size = '-'):
-    weblog.debug(self.prefix + (':"%s" %s %s' %
+    log.debug(self.prefix + (':"%s" %s %s' % 
               (self.requestline, str(code), str(size))))
 
   def log_error (self, fmt, *args):
-    weblog.error(self.prefix + ':' + (fmt % args))
+    log.error(self.prefix + ':' + (fmt % args))
 
   def log_message (self, fmt, *args):
-    weblog.info(self.prefix + ':' + (fmt % args))
+    log.info(self.prefix + ':' + (fmt % args))
 
-
-_favicon = ("47494638396110001000c206006a5797927bc18f83ada9a1bfb49ceabda"
- + "4f4ffffffffffff21f904010a0007002c000000001000100000034578badcfe30b20"
- + "1c038d4e27a0f2004e081e2172a4051942abba260309ea6b805ab501581ae3129d90"
- + "1275c6404b80a72f5abcd4a2454cb334dbd9e58e74693b97425e07002003b")
-_favicon = ''.join([chr(int(_favicon[n:n+2],16))
-                   for n in xrange(0,len(_favicon),2)])
 
 class CoreHandler (SplitRequestHandler):
   """
@@ -149,29 +141,13 @@ class CoreHandler (SplitRequestHandler):
   """
   def do_GET (self):
     """Serve a GET request."""
-    self.do_content(True)
+    self.send_info(True)
 
   def do_HEAD (self):
     """Serve a HEAD request."""
-    self.do_content(False)
+    self.self_info(False)
 
-  def do_content (self, is_get):
-    if self.path == "/":
-      self.send_info(is_get)
-    elif self.path.startswith("/favicon."):
-      self.send_favicon(is_get)
-    else:
-      self.send_error(404, "File not found on CoreHandler")
-
-  def send_favicon (self, is_get = False):
-    self.send_response(200)
-    self.send_header("Content-type", "image/gif")
-    self.send_header("Content-Length", str(len(_favicon)))
-    self.end_headers()
-    if is_get:
-      self.wfile.write(_favicon)
-
-  def send_info (self, is_get = False):
+  def send_info (self, isGet = False):
     r = "<html><head><title>POX</title></head>\n"
     r += "<body>\n<h1>POX Webserver</h1>\n<h2>Components</h2>\n"
     r += "<ul>"
@@ -184,138 +160,207 @@ class CoreHandler (SplitRequestHandler):
          for x in self.args.matches]
     m.sort()
     for v in m:
-      r += "<li><a href='{0}'>{0}</a> - {1} {2}</li>\n".format(*v)
+      r += "<li>%s - %s %s</li>\n" % tuple(v)
     r += "</ul></body></html>\n"
 
     self.send_response(200)
     self.send_header("Content-type", "text/html")
     self.send_header("Content-Length", str(len(r)))
     self.end_headers()
-    if is_get:
+    if isGet:
       self.wfile.write(r)
 
 
-class StaticContentHandler (SplitRequestHandler, SimpleHTTPRequestHandler):
-  # We slightly modify SimpleHTTPRequestHandler to serve from given
-  # directories and inherit from from Python, but
-  # modified to serve from given directories and to inherit from
-  # SplitRequestHandler.
+class StaticContentHandler (SplitRequestHandler):
+    # This is basically SimpleHTTPRequestHandler from Python, but
+    # modified to serve from given directories and to inherit from
+    # SplitRequestHandler.
 
-  """
-  A SplitRequestHandler for serving static content
+    """Simple HTTP request handler with GET and HEAD commands.
 
-  This is largely the same as the Python SimpleHTTPRequestHandler, but
-  we modify it to serve from arbitrary directories at arbitrary
-  positions in the URL space.
-  """
+    This serves files from the current directory and any of its
+    subdirectories.  The MIME type for files is determined by
+    calling the .guess_type() method.
 
-  server_version = "StaticContentHandler/1.0"
+    The GET and HEAD requests are identical except that the HEAD
+    request omits the actual contents of the file.
 
-  def send_head (self):
-    # We override this and handle the directory redirection case because
-    # we want to include the per-split prefix.
-    path = self.translate_path(self.path)
-    if os.path.isdir(path):
-      if not self.path.endswith('/'):
-        self.send_response(301)
-        self.send_header("Location", self.prefix + self.path + "/")
+    """
+
+    server_version = "StaticContentHandler/1.0"
+
+    def do_GET(self):
+        """Serve a GET request."""
+        f = self.send_head()
+        if f:
+            self.copyfile(f, self.wfile)
+            f.close()
+
+    def do_HEAD(self):
+        """Serve a HEAD request."""
+        f = self.send_head()
+        if f:
+            f.close()
+
+    def send_head(self):
+        """Common code for GET and HEAD commands.
+
+        This sends the response code and MIME headers.
+
+        Return value is either a file object (which has to be copied
+        to the outputfile by the caller unless the command was HEAD,
+        and must be closed by the caller under all circumstances), or
+        None, in which case the caller has nothing further to do.
+
+        """
+        path = self.translate_path(self.path)
+        f = None
+        if os.path.isdir(path):
+            if not self.path.endswith('/'):
+                # redirect browser - doing basically what apache does
+                self.send_response(301)
+                self.send_header("Location", self.prefix + self.path + "/")
+                self.end_headers()
+                return None
+            for index in "index.html", "index.htm":
+                index = os.path.join(path, index)
+                if os.path.exists(index):
+                    path = index
+                    break
+            else:
+                return self.list_directory(path)
+        ctype = self.guess_type(path)
+        try:
+            # Always read in binary mode. Opening files in text mode may
+            # cause newline translations, making the actual size of the
+            # content transmitted *less* than the content-length!
+            f = open(path, 'rb')
+        except IOError:
+            self.send_error(404, "File not found")
+            return None
+        self.send_response(200)
+        self.send_header("Content-type", ctype)
+        fs = os.fstat(f.fileno())
+        self.send_header("Content-Length", str(fs[6]))
+        self.send_header("Last-Modified",self.date_time_string(fs.st_mtime))
         self.end_headers()
-        return None
-    return SimpleHTTPRequestHandler.send_head(self)
+        return f
 
-  def list_directory (self, dirpath):
-    # dirpath is an OS path
-    try:
-      d = os.listdir(dirpath)
-    except OSError as e:
-      if e.errno == errno.EACCES:
-        self.send_error(403, "This directory is not listable")
-      elif e.errno == errno.ENOENT:
-        self.send_error(404, "This directory does not exist")
-      else:
-        self.send_error(400, "Unknown error")
-      return None
-    d.sort(key=str.lower)
-    r = StringIO()
-    r.write("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\">\n")
-    path = posixpath.join(self.prefix, cgi.escape(self.path).lstrip("/"))
-    r.write("<html><head><title>" + path + "</title></head>\n")
-    r.write("<body><pre>")
-    parts = path.rstrip("/").split("/")
-    r.write('<a href="/">/</a>')
-    for i,part in enumerate(parts):
-      link = urllib.quote("/".join(parts[:i+1]))
-      if i > 0: part += "/"
-      r.write('<a href="%s">%s</a>' % (link, cgi.escape(part)))
-    r.write("\n" + "-" * (0+len(path)) + "\n")
+    def list_directory(self, path):
+        """Helper to produce a directory listing (absent index.html).
 
-    dirs = []
-    files = []
-    for f in d:
-      if f.startswith("."): continue
-      if os.path.isdir(os.path.join(dirpath, f)):
-        dirs.append(f)
-      else:
-        files.append(f)
+        Return value is either a file object, or None (indicating an
+        error).  In either case, the headers are sent, making the
+        interface the same as for send_head().
 
-    def entry (n, rest=''):
-      link = urllib.quote(n)
-      name = cgi.escape(n)
-      r.write('<a href="%s">%s</a>\n' % (link,name+rest))
+        """
+        try:
+            list = os.listdir(path)
+        except os.error:
+            self.send_error(404, "No permission to list directory")
+            return None
+        list.sort(key=lambda a: a.lower())
+        f = StringIO()
+        displaypath = cgi.escape(urllib.unquote(self.path))
+        f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
+        f.write("<html>\n<title>Directory listing for %s</title>\n" %
+                displaypath)
+        f.write("<body>\n<h2>Directory listing for %s</h2>\n" % displaypath)
+        f.write("<hr>\n<ul>\n")
+        f.write('<li><a href=".."><i>Parent Directory</i></a>\n')
+        for name in list:
+            fullname = os.path.join(path, name)
+            displayname = linkname = name
+            # Append / for directories or @ for symbolic links
+            if os.path.isdir(fullname):
+                displayname = name + "/"
+                linkname = name + "/"
+            if os.path.islink(fullname):
+                displayname = name + "@"
+                # a link to a directory displays with @ and links with /
+            f.write('<li><a href="%s">%s</a>\n'
+                    % (urllib.quote(linkname), cgi.escape(displayname)))
+        f.write("</ul>\n<hr>\n</body>\n</html>\n")
+        length = f.tell()
+        f.seek(0)
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.send_header("Content-Length", str(length))
+        self.end_headers()
+        return f
 
-    for f in dirs:
-      entry(f, "/")
-    for f in files:
-      entry(f)
+    def translate_path(self, path):
+        """Translate a /-separated PATH to the local filename syntax.
 
-    r.write("</pre></body></html>")
-    r.seek(0)
-    self.send_response(200)
-    self.send_header("Content-Type", "text/html")
-    self.send_header("Content-Length", str(len(r.getvalue())))
-    self.end_headers()
-    return r
+        Components that mean special things to the local file system
+        (e.g. drive or directory names) are ignored.  (XXX They should
+        probably be diagnosed.)
 
-  def translate_path (self, path, include_prefix = True):
-    """
-    Translate a web-path to a local filesystem path
+        """
+        # abandon query parameters
+        path = path.split('?',1)[0]
+        path = path.split('#',1)[0]
+        path = posixpath.normpath(urllib.unquote(path))
+        words = path.split('/')
+        words = filter(None, words)
+        #path = os.getcwd()
+        path = os.path.abspath(self.args['root'])
+        for word in words:
+            drive, word = os.path.splitdrive(word)
+            head, word = os.path.split(word)
+            if word in (os.curdir, os.pardir): continue
+            path = os.path.join(path, word)
+        return path
 
-    Odd path elements (e.g., ones that contain local filesystem path
-    separators) are stripped.
-    """
+    def copyfile(self, source, outputfile):
+        """Copy all data between two file objects.
 
-    def fixpath (p):
-      o = []
-      skip = 0
-      while True:
-        p,tail = posixpath.split(p)
-        if p in ('/','') and tail == '': break
-        if tail in ('','.', os.path.curdir, os.path.pardir): continue
-        if os.path.sep in tail: continue
-        if os.path.altsep and os.path.altsep in tail: continue
-        if os.path.splitdrive(tail)[0] != '': continue
+        The SOURCE argument is a file object open for reading
+        (or anything with a read() method) and the DESTINATION
+        argument is a file object open for writing (or
+        anything with a write() method).
 
-        if tail == '..':
-          skip += 1
-          continue
-        if skip:
-          skip -= 1
-          continue
-        o.append(tail)
-      o.reverse()
-      return o
+        The only reason for overriding this would be to change
+        the block size or perhaps to replace newlines by CRLF
+        -- note however that this the default server uses this
+        to copy binary data as well.
 
-    # Remove query string / fragment
-    if "?" in path: path = path[:path.index("?")]
-    if "#" in path: path = path[:path.index("#")]
-    path = fixpath(path)
-    if path:
-      path = os.path.join(*path)
-    else:
-      path = ''
-    if include_prefix:
-      path = os.path.join(os.path.abspath(self.args['root']), path)
-    return path
+        """
+        shutil.copyfileobj(source, outputfile)
+
+    def guess_type(self, path):
+        """Guess the type of a file.
+
+        Argument is a PATH (a filename).
+
+        Return value is a string of the form type/subtype,
+        usable for a MIME Content-type header.
+
+        The default implementation looks the file's extension
+        up in the table self.extensions_map, using application/octet-stream
+        as a default; however it would be permissible (if
+        slow) to look inside the data to make a better guess.
+
+        """
+
+        base, ext = posixpath.splitext(path)
+        if ext in self.extensions_map:
+            return self.extensions_map[ext]
+        ext = ext.lower()
+        if ext in self.extensions_map:
+            return self.extensions_map[ext]
+        else:
+            return self.extensions_map['']
+
+    if not mimetypes.inited:
+        mimetypes.init() # try to read system mime.types
+    extensions_map = mimetypes.types_map.copy()
+    extensions_map.update({
+        '': 'application/octet-stream', # Default
+        '.py': 'text/plain',
+        '.c': 'text/plain',
+        '.h': 'text/plain',
+        })
 
 
 def wrapRequestHandler (handlerClass):
@@ -351,14 +396,14 @@ class SplitterRequestHandler (BaseHTTPRequestHandler):
     BaseHTTPRequestHandler.__init__(self, *args, **kw)
 
   def log_request (self, code = '-', size = '-'):
-    weblog.debug('splitter:"%s" %s %s',
-                 self.requestline, str(code), str(size))
+    log.debug('splitter:"%s" %s %s',
+              self.requestline, str(code), str(size))
 
   def log_error (self, fmt, *args):
-    weblog.error('splitter:' + fmt % args)
+    log.error('splitter:' + fmt % args)
 
   def log_message (self, fmt, *args):
-    weblog.info('splitter:' + fmt % args)
+    log.info('splitter:' + fmt % args)
 
   def handle_one_request(self):
     self.raw_requestline = self.rfile.readline()
@@ -367,7 +412,7 @@ class SplitterRequestHandler (BaseHTTPRequestHandler):
         return
     if not self.parse_request(): # An error code has been sent, just exit
         return
-
+    
     handler = None
 
     while True:
@@ -388,11 +433,12 @@ class SplitterRequestHandler (BaseHTTPRequestHandler):
       if handler is None:
         handler = self
         if not self.path.endswith('/'):
-          # Handle splits like directories
+          # redirect browser - doing basically what apache does
           self.send_response(301)
+          print "redirect to ",self.path+'/'
           self.send_header("Location", self.path + "/")
           self.end_headers()
-          break
+          continue
 
       break
 
@@ -445,38 +491,24 @@ class SplitThreadedServer(ThreadingMixIn, HTTPServer):
                      {'root':local_path}, True);
 
 
-def launch (address='', port=8000, static=False):
+def launch (address='', port=8000, debug=False, static=False):
+  if debug:
+    log.setLevel("DEBUG")
+    log.debug("Debugging enabled")
+  elif log.isEnabledFor("DEBUG"):
+    log.setLevel("INFO")
+
   httpd = SplitThreadedServer((address, int(port)), SplitterRequestHandler)
   core.register("WebServer", httpd)
   httpd.set_handler("/", CoreHandler, httpd, True)
   #httpd.set_handler("/foo", StaticContentHandler, {'root':'.'}, True)
   #httpd.set_handler("/f", StaticContentHandler, {'root':'pox'}, True)
   #httpd.set_handler("/cgis", SplitCGIRequestHandler, "pox/web/www_root")
-  if static is True:
+  if static:
     httpd.add_static_dir('static', 'www_root', relative=True)
-  elif static is False:
-    pass
-  else:
-    static = static.split(",")
-    for entry in static:
-      if entry.lower() == "":
-        httpd.add_static_dir('static', 'www_root', relative=True)
-        continue
-      if ':' not in entry:
-        directory = entry
-        prefix = os.path.split(directory)
-        if prefix[1] == '':
-          prefix = os.path.split(prefix[0])
-        prefix = prefix[1]
-        assert prefix != ''
-      else:
-        prefix,directory = entry.split(":")
-      directory = os.path.expanduser(directory)
-      httpd.add_static_dir(prefix, directory, relative=False)
 
   def run ():
     try:
-      log.debug("Listening on %s:%i" % httpd.socket.getsockname())
       httpd.serve_forever()
     except:
       pass
@@ -485,3 +517,4 @@ def launch (address='', port=8000, static=False):
   thread = threading.Thread(target=run)
   thread.daemon = True
   thread.start()
+

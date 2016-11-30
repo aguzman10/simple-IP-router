@@ -1,16 +1,19 @@
 # Copyright 2011 James McCauley
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 OpenFlow doesn't know anything about Topology, and Topology doesn't
@@ -24,14 +27,14 @@ uses them to populate and manipulate Topology.
 
 import itertools
 
-from pox.lib.revent import *
+from pox.lib.revent.revent import *
 import libopenflow_01 as of
 from pox.openflow import *
 from pox.core import core
 from pox.topology.topology import *
 from pox.openflow.discovery import *
 from pox.openflow.libopenflow_01 import xid_generator
-from pox.openflow.flow_table import FlowTable,FlowTableModification,TableEntry
+from pox.openflow.flow_table import NOMFlowTable
 from pox.lib.util import dpidToStr
 from pox.lib.addresses import *
 
@@ -45,21 +48,31 @@ RECONNECT_TIMEOUT = 30
 
 log = core.getLogger()
 
-class OpenFlowTopology (object):
+class OpenFlowTopology (EventMixin):
   """
   Listens to various OpenFlow-specific events and uses those to manipulate
   Topology accordingly.
   """
+  
+  # Won't boot up OpenFlowTopology until all of these components are loaded
+  # into pox.core. Note though that these components won't be loaded
+  # proactively; they must be specified on the command line (with the
+  # exception of openflow which usally loads automatically)
+  _wantComponents = set(['openflow','topology','openflow_discovery'])
 
   def __init__ (self):
-    core.listen_to_dependencies(self, ['topology'], short_attrs=True)
-
+    """ Note that self.topology is initialized in _resolveComponents """
+    super(EventMixin, self).__init__()
+    if not core.listenToDependencies(self, self._wantComponents):
+      self.listenTo(core)
+  
   def _handle_openflow_discovery_LinkEvent (self, event):
     """
-    The discovery module simply sends out LLDP packets, and triggers
-    LinkEvents for discovered switches. It's our job to take these
-    LinkEvents and update pox.topology.
+    The discovery module simply sends out LLDP packets, and triggers LinkEvents
+    for discovered switches. It's our job to take these LinkEvents and update
+    pox.topology.
     """
+    if self.topology is None: return
     link = event.link
     sw1 = self.topology.getEntityByID(link.dpid1)
     sw2 = self.topology.getEntityByID(link.dpid2)
@@ -71,6 +84,14 @@ class OpenFlowTopology (object):
     elif event.removed:
       sw1.ports[link.port1].entities.discard(sw2)
       sw2.ports[link.port2].entities.discard(sw1)
+
+  def _handle_ComponentRegistered (self, event):
+    """
+    A component was registered with pox.core. If we were dependent on it, 
+    check again if all of our dependencies are now satisfied so we can boot.
+    """
+    if core.listenToDependencies(self, self._wantComponents):
+      return EventRemove
 
   def _handle_openflow_ConnectionUp (self, event):
     sw = self.topology.getEntityByID(event.dpid)
@@ -104,7 +125,7 @@ class OpenFlowTopology (object):
 class OpenFlowPort (Port):
   """
   A subclass of topology.Port for OpenFlow switch ports.
-
+  
   Adds the notion of "connected entities", which the default
   ofp_phy_port class does not have.
 
@@ -130,7 +151,7 @@ class OpenFlowPort (Port):
     return item in self.entities
 
   def addEntity (self, entity, single = False):
-    # Invariant (not currently enforced?):
+    # Invariant (not currently enforced?): 
     #   len(self.entities) <= 2  ?
     if single:
       self.entities = set([entity])
@@ -139,25 +160,24 @@ class OpenFlowPort (Port):
 
   def to_ofp_phy_port(self):
     return of.ofp_phy_port(port_no = self.number, hw_addr = self.hwAddr,
-                           name = self.name, config = self._config,
+                           name = self.name, config = self._config, 
                            state = self._state)
 
   def __repr__ (self):
     return "<Port #" + str(self.number) + ">"
 
-
 class OpenFlowSwitch (EventMixin, Switch):
   """
   OpenFlowSwitches are Topology entities (inheriting from topology.Switch)
-
+  
   OpenFlowSwitches are persistent; that is, if a switch reconnects, the
   Connection field of the original OpenFlowSwitch object will simply be
   reset to refer to the new connection.
-
+  
   For now, OpenFlowSwitch is primarily a proxy to its underlying connection
   object. Later, we'll possibly add more explicit operations the client can
   perform.
-
+  
   Note that for the purposes of the debugger, we can interpose on
   a switch entity by enumerating all listeners for the events listed
   below, and triggering mock events for those listeners.
@@ -182,12 +202,12 @@ class OpenFlowSwitch (EventMixin, Switch):
     EventMixin.__init__(self)
     self.dpid = dpid
     self.ports = {}
-    self.flow_table = OFSyncFlowTable(self)
+    self.flow_table = NOMFlowTable(self)
     self.capabilities = 0
     self._connection = None
     self._listeners = []
     self._reconnectTimeout = None # Timer for reconnection
-    self._xid_generator = xid_generator( ((dpid & 0x7FFF) << 16) + 1)
+    self.xid_generator = xid_generator( ((dpid & 0x7FFF) << 16) + 1)
 
   def _setConnection (self, connection, ofp=None):
     ''' ofp - a FeaturesReply message '''
@@ -203,7 +223,7 @@ class OpenFlowSwitch (EventMixin, Switch):
     if ofp is not None:
       # update capabilities
       self.capabilities = ofp.capabilities
-      # update all ports
+      # update all ports 
       untouched = set(self.ports.keys())
       for p in ofp.ports:
         if p.port_no in self.ports:
@@ -216,10 +236,9 @@ class OpenFlowSwitch (EventMixin, Switch):
         del self.ports[p]
     if connection is not None:
       self._listeners = self.listenTo(connection, prefix="con")
-      self.raiseEvent(SwitchConnectionUp(switch = self,
-                                         connection = connection))
+      self.raiseEvent(SwitchConnectionUp(switch=self, connection = connection))
     else:
-      self.raiseEvent(SwitchConnectionDown(self))
+      self.raiseEvent(SwitchConnectionDown(switch=self))
 
 
   def _timer_ReconnectTimeout (self):
@@ -270,7 +289,7 @@ class OpenFlowSwitch (EventMixin, Switch):
     return self._connection != None
 
   def installFlow(self, **kw):
-    """ install flow in the local table and the associated switch """
+    """ install a flow in the local flow table as well as into the associated switch """
     self.flow_table.install(TableEntry(**kw))
 
   def serialize (self):
@@ -290,171 +309,6 @@ class OpenFlowSwitch (EventMixin, Switch):
   @property
   def name(self):
     return repr(self)
-
-
-class OFSyncFlowTable (EventMixin):
-  _eventMixin_events = set([FlowTableModification])
-  """
-  A flow table that keeps in sync with a switch
-  """
-  ADD = of.OFPFC_ADD
-  REMOVE = of.OFPFC_DELETE
-  REMOVE_STRICT = of.OFPFC_DELETE_STRICT
-  TIME_OUT = 2
-
-  def __init__ (self, switch=None, **kw):
-    EventMixin.__init__(self)
-    self.flow_table = FlowTable()
-    self.switch = switch
-
-    # a list of pending flow table entries : tuples (ADD|REMOVE, entry)
-    self._pending = []
-
-    # a map of pending barriers barrier_xid-> ([entry1,entry2])
-    self._pending_barrier_to_ops = {}
-    # a map of pending barriers per request entry -> (barrier_xid, time)
-    self._pending_op_to_barrier = {}
-
-    self.listenTo(switch)
-
-  def install (self, entries=[]):
-    """
-    asynchronously install entries in the flow table
-
-    will raise a FlowTableModification event when the change has been
-    processed by the switch
-    """
-    self._mod(entries, OFSyncFlowTable.ADD)
-
-  def remove_with_wildcards (self, entries=[]):
-    """
-    asynchronously remove entries in the flow table
-
-    will raise a FlowTableModification event when the change has been
-    processed by the switch
-    """
-    self._mod(entries, OFSyncFlowTable.REMOVE)
-
-  def remove_strict (self, entries=[]):
-    """
-    asynchronously remove entries in the flow table.
-
-    will raise a FlowTableModification event when the change has been
-    processed by the switch
-    """
-    self._mod(entries, OFSyncFlowTable.REMOVE_STRICT)
-
-  @property
-  def entries (self):
-    return self.flow_table.entries
-
-  @property
-  def num_pending (self):
-    return len(self._pending)
-
-  def __len__ (self):
-    return len(self.flow_table)
-
-  def _mod (self, entries, command):
-    if isinstance(entries, TableEntry):
-      entries = [ entries ]
-
-    for entry in entries:
-      if(command == OFSyncFlowTable.REMOVE):
-        self._pending = [(cmd,pentry) for cmd,pentry in self._pending
-                         if not (cmd == OFSyncFlowTable.ADD
-                                 and entry.matches_with_wildcards(pentry))]
-      elif(command == OFSyncFlowTable.REMOVE_STRICT):
-        self._pending = [(cmd,pentry) for cmd,pentry in self._pending
-                         if not (cmd == OFSyncFlowTable.ADD
-                                 and entry == pentry)]
-
-      self._pending.append( (command, entry) )
-
-    self._sync_pending()
-
-  def _sync_pending (self, clear=False):
-    if not self.switch.connected:
-      return False
-
-    # resync the switch
-    if clear:
-      self._pending_barrier_to_ops = {}
-      self._pending_op_to_barrier = {}
-      self._pending = filter(lambda(op): op[0] == OFSyncFlowTable.ADD,
-                             self._pending)
-
-      self.switch.send(of.ofp_flow_mod(command=of.OFPFC_DELETE,
-                                       match=of.ofp_match()))
-      self.switch.send(of.ofp_barrier_request())
-
-      todo = map(lambda(e): (OFSyncFlowTable.ADD, e),
-                 self.flow_table.entries) + self._pending
-    else:
-      todo = [op for op in self._pending
-              if op not in self._pending_op_to_barrier
-              or (self._pending_op_to_barrier[op][1]
-                  + OFSyncFlowTable.TIME_OUT) < time.time() ]
-
-    for op in todo:
-      fmod_xid = self.switch._xid_generator()
-      flow_mod = op[1].to_flow_mod(xid=fmod_xid, command=op[0],
-                                   flags=op[1].flags | of.OFPFF_SEND_FLOW_REM)
-      self.switch.send(flow_mod)
-
-    barrier_xid = self.switch._xid_generator()
-    self.switch.send(of.ofp_barrier_request(xid=barrier_xid))
-    now = time.time()
-    self._pending_barrier_to_ops[barrier_xid] = todo
-
-    for op in todo:
-      self._pending_op_to_barrier[op] = (barrier_xid, now)
-
-  def _handle_SwitchConnectionUp (self, event):
-    # sync all_flows
-    self._sync_pending(clear=True)
-
-  def _handle_SwitchConnectionDown (self, event):
-    # connection down. too bad for our unconfirmed entries
-    self._pending_barrier_to_ops = {}
-    self._pending_op_to_barrier = {}
-
-  def _handle_BarrierIn (self, barrier):
-    # yeah. barrier in. time to sync some of these flows
-    if barrier.xid in self._pending_barrier_to_ops:
-      added = []
-      removed = []
-      #print "barrier in: pending for barrier: %d: %s" % (barrier.xid,
-      #    self._pending_barrier_to_ops[barrier.xid])
-      for op in self._pending_barrier_to_ops[barrier.xid]:
-        (command, entry) = op
-        if(command == OFSyncFlowTable.ADD):
-          self.flow_table.add_entry(entry)
-          added.append(entry)
-        else:
-          removed.extend(self.flow_table.remove_matching_entries(entry.match,
-              entry.priority, strict=command == OFSyncFlowTable.REMOVE_STRICT))
-        #print "op: %s, pending: %s" % (op, self._pending)
-        if op in self._pending: self._pending.remove(op)
-        self._pending_op_to_barrier.pop(op, None)
-      del self._pending_barrier_to_ops[barrier.xid]
-      self.raiseEvent(FlowTableModification(added = added, removed=removed))
-      return EventHalt
-    else:
-      return EventContinue
-
-  def _handle_FlowRemoved (self, event):
-    """
-    process a flow removed event -- remove the matching flow from the table.
-    """
-    flow_removed = event.ofp
-    for entry in self.flow_table.entries:
-      if (flow_removed.match == entry.match
-          and flow_removed.priority == entry.priority):
-        self.flow_table.remove_entry(entry)
-        self.raiseEvent(FlowTableModification(removed=[entry]))
-        return EventHalt
-    return EventContinue
 
 
 def launch ():

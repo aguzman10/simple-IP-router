@@ -1,17 +1,20 @@
 # Copyright 2011 James McCauley
 # Copyright 2008 (C) Nicira, Inc.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file is derived from the packet library in NOX, which was
 # developed by Nicira, Inc.
@@ -161,20 +164,13 @@ class tcp(packet_base):
         self._init(kw)
 
     def __str__(self):
-        f = ''
-        if self.SYN: f += 'S'
-        if self.ACK: f += 'A'
-        if self.FIN: f += 'F'
-        if self.RST: f += 'R'
-        if self.PSH: f += 'P'
-        if self.URG: f += 'U'
-        if self.ECN: f += 'E'
-        if self.CWR: f += 'C'
-
-        s = '[TCP %s>%s seq:%s ack:%s f:%s]' % (self.srcport,
-            self.dstport, self.seq, self.ack, f)
-
-        return s
+        s = ''.join(('{', str(self.srcport), '>',
+                         str(self.dstport), '} seq:',
+                         str(self.seq), ' ack:', str(self.ack), ' f:',
+                         hex(self.flags)))
+        if self.next is None or type(self.next) is bytes:
+            return s
+        return ''.join((s, str(self.next)))
 
     def parse_options(self, raw):
 
@@ -239,7 +235,6 @@ class tcp(packet_base):
 
     def parse(self, raw):
         assert isinstance(raw, bytes)
-        self.next = None # In case of unfinished parsing
         self.raw = raw
         dlen = len(raw)
         if dlen < tcp.MIN_LEN:
@@ -295,15 +290,10 @@ class tcp(packet_base):
         If unparsed, calculates it on the raw, unparsed data.  This is
         useful for validating that it is correct on an incoming packet.
         """
-        ip_ver = None
-        if self.prev.__class__.__name__  == 'ipv4':
-          ip_ver = 4
-        elif self.prev.__class__.__name__  == 'ipv6':
-          ip_ver = 6
-        else:
-          self.msg('packet not in IP; cannot calculate checksum ' +
-                    'over psuedo-header' )
-          return 0
+        if self.prev.__class__.__name__ != 'ipv4':
+            self.msg('packet not in ipv4, cannot calculate checksum ' +
+                     'over psuedo-header' )
+            return 0
 
         if unparsed:
             payload_len = len(self.raw)
@@ -320,17 +310,10 @@ class tcp(packet_base):
             payload = self.hdr(None, calc_checksum = False) + payload
             payload_len = len(payload)
 
-        if ip_ver == 4:
-            ph = struct.pack('!IIBBH', self.prev.srcip.toUnsigned(),
-                                       self.prev.dstip.toUnsigned(),
-                                       0,
-                                       self.prev.protocol,
-                                       payload_len)
+        ippacket = struct.pack('!IIBBH', self.prev.srcip.toUnsigned(),
+                                         self.prev.dstip.toUnsigned(),
+                                         0,
+                                         self.prev.protocol,
+                                         payload_len)
 
-            return checksum(ph + payload, 0, 14)
-        elif ip_ver == 6:
-            ph = self.prev.srcip.raw + self.prev.dstip.raw
-            ph += struct.pack('!IHBB', payload_len, 0, 0,
-                              self.prev.next_header_type)
-
-            return checksum(ph + payload, 0, 28)
+        return checksum(ippacket + payload, 0, 14)

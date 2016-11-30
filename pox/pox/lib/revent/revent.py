@@ -1,16 +1,19 @@
 # Copyright 2011 James McCauley
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 #TODO:
 #-----
@@ -23,37 +26,35 @@ Revent is an event system wherein objects become a composition of data,
 methods, and now events.  It fits with the publish/subscribe communication
 pattern.
 
-Events themselves are generally instances of some subclass of the Event
-class.  In fact, they can be arbitrary values of any sort, though
-subclasses of Event get special handling (and support for values of other
-sorts may eventually be removed).
+Events themselves are generally instances of some subclass of the Event class.
+In fact, they can be arbitrary values of any sort, though subclasses of
+Event get special handling (and support for values of other sorts may
+eventually be removed).
 
-To subscribe to an event, you create a callback function and register it
-with the source.  For example:
+To subscribe to an event, you create a callback function and register it with
+the source.  For example:
 
 def bar_handler(self, event):
-  print("bar!", event)
+  print "bar!", event
 
 pox.core.addListener(UpEvent, bar_handler)
 
 
-Often (especially if you are going to listen to multiple events from a
-single source), it is easier to inherit from EventMixin just so that you
-can use the listenTo() method.  For example:
+Often (especially if you are going to listen to multiple events from a single
+source), it is easier to inherit from EventMixin just so that you can use the
+listenTo() method.  For example:
 
 class Sink (EventMixin):
   def __init__(self):
-   # Listen to events sourced by pox.core
-   pox.core.addListeners(self)
+   # This tells revent that we want to listen to events triggered by pox.core
    self.listenTo(pox.core)
 
   def _handle_ComponentRegistered (self, event):
-    # The name of this method has a special meaning to addListeners().
-    # If a method name starts with _handle_ and ends with the name of
-    # an event that the source publishes, the method is automatically
-    # registered as an event handler.
-    #
-    # This method will now be called whenever pox.core triggers a
+    # The name of this method has a special meaning. Any method with a prefix
+    # of '_handle_', and a suffix naming an EventType that the source
+    # publishes will automatically be registered as an event handler.
+    #  
+    # This method will now be called whenever pox.core triggers a 
     # ComponentRegistered event.
 
     # Most event handlers are passed an event object as a parameter (though
@@ -61,14 +62,14 @@ class Sink (EventMixin):
     # _invoke() method).
     component = event.component
     name = event.name
-    print("I see you,", name, "!")
+    print "I see you,", name, "!"
 
 
 Event sources can also use the EventMixin library:
 
 class Source (EventMixin):
-  # Defining this variable tells the revent library what kind of events
-  # this source can raise.
+  # Defining this variable tells the revent library what kind of events this
+  # source can raise.
   _eventMixin_events = set([ComponentRegistered])
 
   def __init__ (self):
@@ -81,7 +82,7 @@ class Source (EventMixin):
 
     # In the above invocation, the argument is an instance of
     # ComponentRegistered (which is a subclass of Event).  The following is
-    # functionally equivalent, but has the nice property that
+    # functionally equivalent, but has the nice property that 
     # ComponentRegistered is never instantiated if there are no listeners.
     #self.raiseEvent(ComponentRegistered, component)
     # In both cases, "component" is passed to the __init__ method for the
@@ -91,13 +92,14 @@ class Source (EventMixin):
     # handler rauses an exception.  To project yourself from exceptions in
     # handlers, see raiseEventNoErrors().
 """
-
-from __future__ import print_function
-
 import operator
 
-# weakrefs are used for some event handlers so that just having an event
-# handler set will not keep the source (publisher) alive.
+# weakrefs are used for some event handlers. 
+#
+# See: http://docs.python.org/library/weakref.html:
+# "A weak reference to an object is not enough to keep the object alive: when
+# the only remaining references to a referent are weak references, garbage
+# collection is free to destroy the referent"
 import weakref
 
 
@@ -121,8 +123,8 @@ def EventReturn (halt = False, remove = False):
   If halt is True, further handlers will not be called for this particular
   event.
 
-  If remove is True, the handler will be removed (i.e. unsubscribed) and
-  will not be called anymore.
+  If remove is True, the handler will be removed (i.e. unsubscribed) and will
+  not be called anymore.
 
   Shortcut names are also available.  You can also simply do:
   return EventHalt
@@ -167,8 +169,8 @@ def handleEventException (source, event, args, kw, exc_info):
 
   "source" is the object sourcing the event.  "event" is the event that was
   being raised when the exception occurred.  "args" and "kw" were the args
-  and kwargs passed to raiseEventNoErrors.  "exc_info" is the exception
-  info as returned by sys.exc_info()).
+  and kwargs passed to raiseEventNoErrors.  "exc_info" is the exception info
+  as returned by sys.exc_info()).
   """
   try:
     c = source
@@ -186,12 +188,12 @@ def handleEventException (source, event, args, kw, exc_info):
 
 class EventMixin (object):
   """
-  Mixin for classes that want to source events
+  Mixin to be inherited from if the subclass is interested in handling events
   """
-  # _eventMixin_events contains the set of events that the subclassing
-  # object will raise.
-  # You can't raise events that aren't in this set -- unless you set this
-  # to True in which all events are acceptable.
+  # _eventMixin_events contains the set of events that the subclassing object
+  # will raise.
+  # You can't raise events that aren't in this set.  However, if you set this
+  # to True, all events are acceptable.
   _eventMixin_events = set()
 
   def _eventMixin_addEvents (self, events):
@@ -225,8 +227,8 @@ class EventMixin (object):
     If exceptions are caught, the global handleEventExceptions() is called.
     Also see raiseEvent()
     """
-    #TODO: this should really keep subsequent events executing and print
-    #      the specific handler that failed...
+    #TODO: this should really keep subsequent events executing and print the
+    #      specific handler that failed...
     try:
       return self.raiseEvent(event, *args, **kw)
     except:
@@ -238,10 +240,10 @@ class EventMixin (object):
   def raiseEvent (self, event, *args, **kw):
     """
     Raises an event.
-    If "event" is an Event type, it will be initialized with args and kw,
-    but only if there are actually listeners.
-    Returns the event object, unless it was never created (because there
-    were no listeners) in which case returns None.
+    If "event" is an Event type, it will be initialized with args and kw, but
+    only if there are actually listeners.
+    Returns the event object, unless it was never created (because there were
+    no listeners) in which case returns None.
     """
     self._eventMixin_init()
 
@@ -264,14 +266,14 @@ class EventMixin (object):
       kw = {}
       if event.source is None:
         event.source = self
-    #print("raise",event,eventType)
+    #print "raise",event,eventType
     if (self._eventMixin_events is not True
         and eventType not in self._eventMixin_events):
-      raise RuntimeError("Event %s not defined on object of type %s"
-                         % (eventType, type(self)))
+      raise RuntimeError("Event " + str(eventType) +
+                         " not defined on object of type " + str(type(self)))
 
-    # Create a copy so that it can be modified freely during event
-    # processing.  It might make sense to change this.
+    # Create a copy so that it can be modified freely during event processing.
+    # It might make sense to change this.
     handlers = self._eventMixin_handlers.get(eventType, [])
     for (priority, handler, once, eid) in handlers:
       if classCall:
@@ -283,16 +285,13 @@ class EventMixin (object):
       if rv is False:
         self.removeListener(eid)
       if rv is True:
-        if classCall: event.halt = True
         break
       if type(rv) == tuple:
         if len(rv) >= 2 and rv[1] == True:
           self.removeListener(eid)
         if len(rv) >= 1 and rv[0]:
-          if classCall: event.halt = True
           break
         if len(rv) == 0:
-          if classCall: event.halt = True
           break
       #if classCall and hasattr(event, "halt") and event.halt:
       if classCall and event.halt:
@@ -313,13 +312,13 @@ class EventMixin (object):
 
   def removeListener (self, handlerOrEID, eventType=None):
     """
-    handlerOrEID : a reference to a handler object, an event ID (EID)
-                   identifying the event type, or (eventType, EID) pair
+    handlerOrEID : either a reference to a handler object, an event ID (EID) 
+                  identifying the event type, or (eventType, EID) pair
     eventType : the type of event to remove the listener(s) for
     """
     #TODO: This method could use an elegant refactoring.
 
-    #print("Remove listener", handlerOrEID)
+    #print "Remove listener", handlerOrEID
     self._eventMixin_init()
     handler = handlerOrEID
 
@@ -380,24 +379,21 @@ class EventMixin (object):
     Add an event handler for an event triggered by this object (subscribe).
 
     eventType : event class object (e.g. ConnectionUp). If byName is True,
-                should be a string (e.g. "ConnectionUp")
-    handler : function/method to be invoked when event is raised
-    once : if True, this handler is removed after being fired once
-    weak : If handler is a method on object A, then listening to an event
-           on object B will normally make B have a reference to A, so A
-           can not be released until after B is released or the listener
-           is removed.
-           If weak is True, there is no relationship between the lifetimes
-           of the publisher and subscriber.
-    priority : The order in which to call event handlers if there are
-               multiple for an event type.  Should probably be an integer,
-               where higher means to call it earlier.  Do not specify if
-               you don't care.
-    byName : True if eventType is a string name, else an Event subclass
+                should be a string (e.g. "ConnectionUp") 
+    handler : function/method to be invoked when event is raised 
+    once : if True, this handler is removed after the first time it is fired
+    weak : If handler is a method on object A, then listening to an event on
+           object B will normally make B have a reference to A, so A can not
+           be released until after B is released or the listener is removed.
+           If weak is True, there is no relationship between the lifetimes of
+           the publisher and subscriber.
+    priority : The order in which to call event handlers if there are multiple
+               for an event type.  Should probably be an integer, where higher
+               means to call it earlier.  Do not specify if you don't care.
+    byName : True if eventType is a string name, else it's an Event subclass
 
-    Raises an exception unless eventType is in the source's
-    _eventMixin_events set (or, alternately, _eventMixin_events must
-    be True).
+    Raises an exception unless eventType is in the source's _eventMixin_events
+    set (or, alternately, _eventMixin_events must be True).
 
     The return value can be used for removing the listener.
     """
@@ -416,8 +412,8 @@ class EventMixin (object):
               fail = False
               break
       if fail:
-        raise RuntimeError("Event %s not defined on object of type %s"
-                           % (eventType, type(self)))
+        raise RuntimeError("Event " + str(eventType) +
+                           " not defined on object of type " + str(type(self)))
     if eventType not in self._eventMixin_handlers:
       # if no handlers are already registered, initialize
       handlers = self._eventMixin_handlers[eventType] = []
@@ -459,7 +455,7 @@ class EventMixin (object):
     See also: listenTo(), autoBindEvents()
     """
     return autoBindEvents(sink, self, prefix, weak, priority)
-
+  
   def clearHandlers(self):
     """
     Remove all handlers from this object
@@ -471,14 +467,13 @@ def autoBindEvents (sink, source, prefix='', weak=False, priority=None):
   """
   Automatically set up listeners on sink for events raised by source.
 
-  Often you have a "sink" object that is interested in multiple events
-  raised by some other "source" object.  This method makes setting that
-  up easy.
-  You name handler methods on the sink object in a special way.  For
-  example, lets say you have an object mySource which raises events of
-  types FooEvent and BarEvent.  You have an object mySink which wants to
-  listen to these events.  To do so, it names its handler methods
-  "_handle_FooEvent" and "_handle_BarEvent".  It can then simply call
+  Often you have a "sink" object that is interested in multiple events raised
+  by some other "source" object.  This method makes setting that up easy.
+  You name handler methods on the sink object in a special way.  For example,
+  lets say you have an object mySource which raises events of types
+  FooEvent and BarEvent.  You have an object mySink which wants to listen
+  to these events.  To do so, it names its handler methods "_handle_FooEvent"
+  and "_handle_BarEvent".  It can then simply call
   autoBindEvents(mySink, mySource), and the handlers are set up.
 
   You can also set a prefix which changes how the handlers are to be named.
@@ -492,8 +487,8 @@ def autoBindEvents (sink, source, prefix='', weak=False, priority=None):
   if len(prefix) > 0 and prefix[0] != '_': prefix = '_' + prefix
   if hasattr(source, '_eventMixin_events') is False:
     # If source does not declare that it raises any events, do nothing
-    print("Warning: source class %s doesn't specify any events!" % (
-          source.__class__.__name__,))
+    print "Warning: source class %s doesn't specify any events!" % (
+     source.__class__.__name__,)
     return []
 
   events = {}
@@ -509,7 +504,7 @@ def autoBindEvents (sink, source, prefix='', weak=False, priority=None):
     # get the method object
     a = getattr(sink, m)
     if callable(a):
-      # if it has the revent prefix signature,
+      # if it has the revent prefix signature, 
       if m.startswith("_handle" + prefix + "_"):
         event = m[8+len(prefix):]
         # and it is one of the events our source triggers
@@ -517,11 +512,12 @@ def autoBindEvents (sink, source, prefix='', weak=False, priority=None):
           # append the listener
           listeners.append(source.addListener(events[event], a, weak=weak,
                                               priority=priority))
-          #print("autoBind: ",source,m,"to",sink)
+          #print "autoBind: ",source,m,"to",sink
         elif len(prefix) > 0 and "_" not in event:
           print("Warning: %s found in %s, but %s not raised by %s" %
-                (m, sink.__class__.__name__, event,
-                 source.__class__.__name__))
+                (m, sink.__class__.__name__, event, source.__class__.__name__))
+
+
 
   return listeners
 
@@ -548,18 +544,19 @@ class CallProxy (object):
 
   def _forgetMe (self, o):
     # o is the weak reference object; we don't use it
-    #print("Forgetting",self.removeData,self.method)
+    #print "Forgetting",self.removeData,self.method
     source = self.source()
     if source is not None:
       source.removeListener(self.removeData)
     self.obj = None
   def __call__ (self, *args, **kw):
-    #print("weak call")
+    #print "weak call"
     if self.obj is None: return
     o = self.obj()
     if o is not None:
       return self.method(o, *args, **kw)
-    print("callProxy object is gone!")
+    print "callProxy object is gone!"
     raise RuntimeError("callProxy object is gone!")
   def __str__ (self):
     return "<CallProxy for " + self.name + ">"
+

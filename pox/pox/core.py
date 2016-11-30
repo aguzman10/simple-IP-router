@@ -1,16 +1,19 @@
-# Copyright 2011-2013 James McCauley
+# Copyright 2011 James McCauley
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
+# This file is part of POX.
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# POX is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# POX is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with POX.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 Some of POX's core API and functionality is here, largely in the POXCore
@@ -19,8 +22,6 @@ class (an instance of which is available as pox.core.core).
 This includes things like component rendezvous, logging, system status
 (up and down events), etc.
 """
-
-from __future__ import print_function
 
 # Set up initial log state
 import logging
@@ -66,9 +67,6 @@ def getLogger (name=None, moreFrames=0):
           del n[-1]
           name = '.'.join(n)
 
-    if name.startswith("ext."):
-      name = name.split("ext.",1)[1]
-
     if name.endswith(".__init__"):
       name = name.rsplit(".__init__",1)[0]
 
@@ -105,7 +103,6 @@ def getLogger (name=None, moreFrames=0):
   return l
 
 
-# Working around something (don't remember what)
 log = (lambda : getLogger())()
 
 from pox.lib.revent import *
@@ -185,28 +182,16 @@ class POXCore (EventMixin):
   def __init__ (self):
     self.debug = False
     self.running = True
-    self.starting_up = True
-    self.components = {'core':self}
+    self.components = {}
 
-    import threading
-    self.quit_condition = threading.Condition()
-
-    self.version = (0,2,0)
-    self.version_name = "carp"
-    print(self.banner)
+    self.version = (0,0,0)
+    print "{0} / Copyright 2011 James McCauley".format(self.version_string)
 
     self.scheduler = recoco.Scheduler(daemon=True)
 
-    self._waiters = [] # List of waiting components
-
-  @property
-  def banner (self):
-    return "{0} / Copyright 2011-2013 James McCauley, et al.".format(
-     self.version_string)
-
   @property
   def version_string (self):
-    return "POX %s (%s)" % ('.'.join(map(str,self.version)),self.version_name)
+    return "POX " + '.'.join(map(str, self.version))
 
   def callDelayed (_self, _seconds, _func, *args, **kw):
     """
@@ -259,101 +244,35 @@ class POXCore (EventMixin):
     """
     Shut down POX.
     """
-    import threading
-    if (self.starting_up or
-        threading.current_thread() is self.scheduler._thread):
-      t = threading.Thread(target=self._quit)
-      t.daemon = True
-      t.start()
-    else:
-      self._quit()
-
-  def _quit (self):
-    # Should probably do locking here
-    if not self.running:
-      return
-    if self.starting_up:
-      # Try again later
-      self.quit()
-      return
-
-    self.running = False
-    log.info("Going down...")
-    import gc
-    gc.collect()
-    self.raiseEvent(GoingDownEvent())
-    self.callLater(self.scheduler.quit)
-    for i in range(50):
-      if self.scheduler._hasQuit: break
+    if self.running:
+      self.running = False
+      log.info("Going down...")
+      import gc
       gc.collect()
-      time.sleep(.1)
-    if not self.scheduler._allDone:
-      log.warning("Scheduler didn't quit in time")
-    self.raiseEvent(DownEvent())
-    log.info("Down.")
-    #logging.shutdown()
-    self.quit_condition.acquire()
-    self.quit_condition.notifyAll()
-    core.quit_condition.release()
-
-  def _get_python_version (self):
-    try:
-      import platform
-      return "{impl} ({vers}/{build})".format(
-       impl=platform.python_implementation(),
-       vers=platform.python_version(),
-       build=platform.python_build()[1].replace("  "," "))
-    except:
-      return "Unknown Python"
-
-  def _get_platform_info (self):
-    try:
-      import platform
-      return platform.platform().split("\n")[0]
-    except:
-      return "Unknown Platform"
+      self.raiseEvent(GoingDownEvent())
+      self.callLater(self.scheduler.quit)
+      for i in range(50):
+        if self.scheduler._hasQuit: break
+        gc.collect()
+        time.sleep(.1)
+      if not self.scheduler._allDone:
+        log.warning("Scheduler didn't quit in time")
+      self.raiseEvent(DownEvent())
+      log.info("Down.")
 
   def goUp (self):
     log.debug(self.version_string + " going up...")
 
-    log.debug("Running on " + self._get_python_version())
-    log.debug("Platform is " + self._get_platform_info())
-    try:
-      import platform
-      vers = '.'.join(platform.python_version().split(".")[:2])
-    except:
-      vers = 'an unknown version'
-    if vers != "2.7":
-      l = logging.getLogger("version")
-      if not l.isEnabledFor(logging.WARNING):
-        l.setLevel(logging.WARNING)
-      l.warn("POX requires Python 2.7. You're running %s.", vers)
-      l.warn("If you run into problems, try using Python 2.7 or PyPy.")
+    import platform
+    py = "{impl} ({vers}/{build})".format(
+     impl=platform.python_implementation(),
+     vers=platform.python_version(),
+     build=platform.python_build()[1].replace("  "," "))
+    log.debug("Running on " + py)
 
-    self.starting_up = False
     self.raiseEvent(GoingUpEvent())
-
+    log.info(self.version_string + " is up.")
     self.raiseEvent(UpEvent())
-
-    self._waiter_notify()
-
-    if self.running:
-      log.info(self.version_string + " is up.")
-
-  def _waiter_notify (self):
-    if len(self._waiters):
-      waiting_for = set()
-      for entry in self._waiters:
-        _, name, components, _, _ = entry
-        components = [c for c in components if not self.hasComponent(c)]
-        waiting_for.update(components)
-        log.debug("%s still waiting for: %s"
-                  % (name, " ".join(components)))
-      names = set([n for _,n,_,_,_ in self._waiters])
-
-      #log.info("%i things still waiting on %i components"
-      #         % (names, waiting_for))
-      log.warn("Still waiting on %i component(s)" % (len(waiting_for),))
 
   def hasComponent (self, name):
     """
@@ -378,199 +297,53 @@ class POXCore (EventMixin):
     self.register(name, obj)
     return obj
 
-  def register (self, name, component=None):
+  def register (self, name, component):
     """
     Makes the object "component" available as pox.core.core.name.
-
-    If only one argument is specified, the given argument is registered
-    using its class name as the name.
     """
     #TODO: weak references?
-    if component is None:
-      component = name
-      name = component.__class__.__name__
-      if hasattr(component, '_core_name'):
-        # Default overridden
-        name = component._core_name
-
     if name in self.components:
       log.warn("Warning: Registered '%s' multipled times" % (name,))
     self.components[name] = component
     self.raiseEventNoErrors(ComponentRegistered, name, component)
-    self._try_waiters()
-
-  def call_when_ready (self, callback, components=[], name=None, args=(),
-                       kw={}):
+    
+  def listenToDependencies(self, sink, components):
     """
-    Calls a callback when components are ready.
+    If a component depends on having other components
+    registered with core before it can boot, it can use this method to 
+    check for registration, and listen to events on those dependencies.
+    
+    Note that event handlers named with the _handle* pattern in the sink must
+    include the name of the desired source as a prefix. For example, if topology is a
+    dependency, a handler for topology's SwitchJoin event must be labeled:
+       def _handle_topology_SwitchJoin(...)
+    
+    sink - the component waiting on dependencies
+    components - a list of dependent component names
+    
+    Returns whether all of the desired components are registered.
     """
-    if callback is None:
-      callback = lambda:None
-      callback.func_name = "<None>"
-    if isinstance(components, basestring):
-      components = [components]
-    elif isinstance(components, set):
-      components = list(components)
-    else:
-      try:
-        _ = components[0]
-        components = list(components)
-      except:
-        components = [components]
-    if name is None:
-      #TODO: Use inspect here instead
-      name = getattr(callback, 'func_name')
-      if name is None:
-        name = str(callback)
-      else:
-        name += "()"
-        if hasattr(callback, 'im_class'):
-          name = getattr(callback.im_class,'__name__', '') + '.' + name
-      if hasattr(callback, '__module__'):
-        # Is this a good idea?  If not here, we should do it in the
-        # exception printing in try_waiter().
-        name += " in " + callback.__module__
-    entry = (callback, name, components, args, kw)
-    self._waiters.append(entry)
-    self._try_waiter(entry)
-
-  def _try_waiter (self, entry):
-    """
-    Tries a waiting callback.
-
-    Calls the callback, removes from _waiters, and returns True if
-    all are satisfied.
-    """
-    if entry not in self._waiters:
-      # Already handled
-      return
-    callback, name, components, args_, kw_ = entry
+    if components == None or len(components) == 0:
+      return True
+  
+    got = set()
     for c in components:
-      if not self.hasComponent(c):
-        return False
-    self._waiters.remove(entry)
-    try:
-      if callback is not None:
-        callback(*args_,**kw_)
-    except:
-      import traceback
-      msg = "Exception while trying to notify " + name
-      import inspect
-      try:
-        msg += " at " + inspect.getfile(callback)
-        msg += ":" + str(inspect.getsourcelines(callback)[1])
-      except:
-        pass
-      log.exception(msg)
-    return True
-
-  def _try_waiters (self):
-    """
-    Tries to satisfy all component-waiting callbacks
-    """
-    changed = True
-
-    while changed:
-      changed = False
-      for entry in list(self._waiters):
-        if self._try_waiter(entry):
-          changed = True
-
-  def listen_to_dependencies (self, sink, components=None, attrs=True,
-                              short_attrs=False, listen_args={}):
-    """
-    Look through *sink* for handlers named like _handle_component_event.
-    Use that to build a list of components, and append any components
-    explicitly specified by *components*.
-
-    listen_args is a dict of "component_name"={"arg_name":"arg_value",...},
-    allowing you to specify additional arguments to addListeners().
-
-    When all the referenced components are registered, do the following:
-    1) Set up all the event listeners
-    2) Call "_all_dependencies_met" on *sink* if it exists
-    3) If attrs=True, set attributes on *sink* for each component
-       (e.g, sink._openflow_ would be set to core.openflow)
-
-    For example, if topology is a dependency, a handler for topology's
-    SwitchJoin event must be defined as so:
-       def _handle_topology_SwitchJoin (self, ...):
-
-    *NOTE*: The semantics of this function changed somewhat in the
-            Summer 2012 milestone, though its intention remains the same.
-    """
-    if components is None:
-      components = set()
-    elif isinstance(components, basestring):
-      components = set([components])
-    else:
-      components = set(components)
-
-    for c in dir(sink):
-      if not c.startswith("_handle_"): continue
-      if c.count("_") < 3: continue
-      c = '_'.join(c.split("_")[2:-1])
-      components.add(c)
-
-    if None in listen_args:
-      # This means add it to all...
-      args = listen_args.pop(None)
-      for k,v in args.iteritems():
-        for c in components:
-          if c not in listen_args:
-            listen_args[c] = {}
-          if k not in listen_args[c]:
-            listen_args[c][k] = v
-
-    if set(listen_args).difference(components):
-      log.error("Specified listen_args for missing component(s): %s" %
-                (" ".join(set(listen_args).difference(components)),))
-
-    def done (sink, components, attrs, short_attrs):
-      if attrs or short_attrs:
-        for c in components:
-          if short_attrs:
-            attrname = c
-          else:
-            attrname = '_%s_' % (c,)
-          setattr(sink, attrname, getattr(self, c))
-      for c in components:
-        if hasattr(getattr(self, c), "_eventMixin_events"):
-          kwargs = {"prefix":c}
-          kwargs.update(listen_args.get(c, {}))
-          getattr(self, c).addListeners(sink, **kwargs)
-      getattr(sink, "_all_dependencies_met", lambda : None)()
-
-
-    self.call_when_ready(done, components, name=sink.__class__.__name__,
-                         args=(sink,components,attrs,short_attrs))
-
-    if not self.starting_up:
-      self._waiter_notify()
+      if self.hasComponent(c):
+        setattr(sink, c, getattr(self, c))
+        sink.listenTo(getattr(self, c), prefix=c)
+        got.add(c)
+      else:
+        setattr(sink, c, None)
+    for c in got:
+      components.remove(c)
+    if len(components) == 0:
+      log.debug(sink.__class__.__name__ + " ready")
+      return True
+    return False
 
   def __getattr__ (self, name):
     if name not in self.components:
       raise AttributeError("'%s' not registered" % (name,))
     return self.components[name]
 
-
-core = None
-
-def initialize ():
-  global core
-  core = POXCore()
-  return core
-
-# The below is a big hack to make tests and doc tools work.
-# We should do something better.
-def _maybe_initialize ():
-  import sys
-  if 'unittest' in sys.modules or 'nose' in sys.modules:
-    initialize()
-    return
-  import __main__
-  mod = getattr(__main__, '__file__', '')
-  if 'pydoc' in mod:
-    initialize()
-    return
-_maybe_initialize()
+core = POXCore()

@@ -313,7 +313,7 @@ void sr_handlepacket_arp(struct sr_instance *sr, uint8_t *pkt,
  *
  *
  */
-void sr_create_icmp_message(struct sr_instance *sr, int type, int code, uint8_t *packet, int len, struct sr_if intreface) {
+void sr_create_icmp_message(struct sr_instance *sr, int type, int code, uint8_t *packet, int len, struct sr_if *interface) {
 	uint8_t *header_buffer;
 	int size;
 	sr_icmp_t3_hdr_t *icmp_header;
@@ -350,15 +350,15 @@ void sr_create_icmp_message(struct sr_instance *sr, int type, int code, uint8_t 
 			icmp_header->icmp_sum = cksum(icmp_header, sizeof(sr_icmp_hdr_t));	 	
 			break;
 	}
-	sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *)(hdrbuf + sizeof(sr_ethernet_hdr_t));
-	ip_header->ip_dst = ip_header->ip_src
+	sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t));
+	ip_header->ip_dst = ip_header->ip_src;
 	ip_header->ip_ttl = 64;
 	ip_header->ip_src = interface->ip;
 	ip_header->ip_p = ip_protocol_icmp;
 	ip_header->ip_len = htons(sizeof(sr_ip_hdr_t)+size);
-	ip_header->sum = cksum(ip_header, ip_header->ip_h1 * 4);
+	ip_header->ip_sum = cksum(ip_header, ip_header->ip_hl * 4);
 	sr_ethernet_hdr_t *ethernet_header = (sr_ethernet_hdr_t *)(header_buffer);
-	memcpy(ethernet_header->ether_dhost, eth_hdr->ether_shost,sizeof(uint8_t) * ETHER_ADDR_LEN);	
+	memcpy(ethernet_header->ether_dhost, ethernet_header->ether_shost,sizeof(uint8_t) * ETHER_ADDR_LEN);	
 	memcpy(ethernet_header->ether_shost, interface->addr, sizeof(uint8_t) * ETHER_ADDR_LEN);
 	ethernet_header->ether_type = htons(ethertype_ip);
 	sr_send_packet(sr, header_buffer, sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t)+size, interface->name);

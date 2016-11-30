@@ -304,23 +304,85 @@ void sr_handlepacket_arp(struct sr_instance *sr, uint8_t *pkt,
   }
 } /* -- sr_handlepacket_arp -- */
 
+/*
+ *Creating ICMP messages
+ * TODO: fix first todo to use this?
+ *
+ *
+ *
+ *
+ *
+ */
+void sr_create_icmp_message(struct sr_instance *sr, int type, int code, uint8_t *packet, int len, struct sr_if intreface) {
+	uint8_t *header_buffer;
+	int size;
+	switch(type) {
+		case 3:
+		case 11:
+			size = sizeof(sr_icmp_t3_hdr_t);
+			header_buffer = (uint8_t*)malloc(sizeof(sr_icmp_t3_hdr_t)+sizeof(sr_ip_hdr_t));
+			memcpy(header_buffer, packet, sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			sr_icmp_t3_hdr_t *icmp_header = (sr_icmp_t3_hdr_t *)(header_buffer +sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			icmp_header->icmp_code = code;
+			icmp_header->icmp_type = type;
+			icmp_header->next_mtu = IP_MAXPACKET;
+			memcpy(icmp_header->data, packet + sizeof(sr_ethernet_hdr_t), ICMP_DATA_SIZE);
+			icmp_header->icmp_sum = cksum(icmp_header, sizeof(sr_icmp_t3_hdr_t));		
+			break;
+		case 0: 
+			header_buffer = (uint8_t*)malloc(len);
+			memcpy(header_buffer,packet,len);
+			sr_icmp_hdr_t *icmp_header = (sr_icmp_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			icmp_header->icmp_code = code;
+			icmp_header->icmp_type = type;
+			icmp_header->icmp_sum = cksum(icmp_header, sizeof(sr_icmp_hdr_t));
+			break;
+		default:
+			size = sizeof(sr_icmp_hdr_t);
+			header_buffer = (uint8_t*)malloc(sizeof(sr_icmp_hdr_t)+sizeof(sr_ip_hdr_t)+sizeof(sr_ethernet_hdr_t));
+			memcpy(header_buffer, packet, sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			sr_icmp_hdr_t *icmp_header = (sr_icmp_hdr_t *)(header_buffer + sizeof(sr_ethernet_hdr_t)+sizeof(sr_ip_hdr_t));
+			icmp_header->icmp_type = type;
+			icmp_header->icmp_code = code;
+			icmp_header->icmp_sum = cksum(icmp_header, sizeof(sr_icmp_hdr_t));	 	
+			break;
+	}
+	
+}
+
 /*-------------------------------------------------------------------------
  * Method: sr_handlepacket_ip
  * Scope: Global
  * Hanldes ip packets
  *-------------------------------------------------------------------------*/
 
-void sr_handlepackets_ip(struct sr_instance* sr,
+void sr_handlepacket_ip(struct sr_instance* sr,
 	uint8_t * packet,
 	unsigned int len,
 	char* interface)
 {
- /*TODO: make sure its a valid ip  packet */
 	sr_ip_hdr_t* ip_header = (sr_ip_hdr_t*)(packet+sizeof(sr_ethernet_hdr_t));
-	if(ip_header->ip_sum != cksum(ip_header, ip_header->ip_hl * 4)|| len < sizeof(sr_ip_hdr_t) + sizeof(sr_ethernet_hdr_t) ) /*TODO: check packet length?*/
+ /*TODO: make sure its a valid ip  packet */
+
+	if(ip_header->ip_sum != cksum(ip_header, ip_header->ip_hl * 4))
 		return;
 			
  /*TODO: handle */
+	/*TODO: handle if packet is for me*/
+	int sent_to_us = 0;
+	struct sr_if *inter = sr->if_list;
+	while(inter != NULL) {
+		if(ip_header->ip_dst == inter->ip)
+			sent_to_us = 1;
+		inter = inter->next;
+	}
+	if(sent_to_us == 1) {
+		ip_header->ip_ttl--;
+		if(ip_header->ip_ttl == 0) {
+				
+		}
+	}
+	/*TODO: handle if packet is to be forwarded*/	
 
 }
 

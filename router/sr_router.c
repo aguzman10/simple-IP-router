@@ -281,8 +281,13 @@ void sr_handlepacket_arp(struct sr_instance *sr, uint8_t *pkt,
 		sr_ethernet_hdr_t * ethernet_header = (sr_ethernet_hdr_t *)(packet->buf);
 		memcpy(ethernet_header->ether_dhost, arphdr->ar_sha, sizeof(unsigned char) * ETHER_ADDR_LEN);
 		memcpy(ethernet_header->ether_shost, src_iface->addr, sizeof(unsigned char) * ETHER_ADDR_LEN);
+		
 		/*TODO: decrement TTL of ip header*/
+		sr_ip_hdr_t * ip_header = (sr_ip_hdr_t *)(packet->buf+sizeof(sr_ip_hdr_t));
+		ip_header->ip_ttl--; /*Not sure if this works */
 		/*TODO: redo checksum*/
+		ip_header->ip_sum = cksum(ip_header, packet->len-sizeof(sr_ethernet_hdr_t));
+		sr_send_packet(sr, packet->buf, packet->len,packet->iface);
 		packet = packet->next;
 	}
 	/*********************************************************************/

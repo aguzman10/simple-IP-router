@@ -304,6 +304,26 @@ void sr_handlepacket_arp(struct sr_instance *sr, uint8_t *pkt,
   }
 } /* -- sr_handlepacket_arp -- */
 
+/*-------------------------------------------------------------------------
+ * Method: sr_handlepacket_ip
+ * Scope: Global
+ * Hanldes ip packets
+ *-------------------------------------------------------------------------*/
+
+void sr_handlepackets_ip(struct sr_instance* sr,
+	uint8_t * packet,
+	unsigned int len,
+	char* interface)
+{
+ /*TODO: make sure its a valid ip  packet */
+	sr_ip_hdr_t* ip_header = (sr_ip_hdr_t*)(packet+sizeof(sr_ethernet_hdr_t));
+	if(ip_header->ip_sum != cksum(ip_header, ip_header->ip_hl * 4)|| len < sizeof(sr_ip_hdr_t) + sizeof(sr_ethernet_hdr_t) ) /*TODO: check packet length?*/
+		return;
+			
+ /*TODO: handle */
+
+}
+
 /*---------------------------------------------------------------------
  * Method: sr_handlepacket(uint8_t* p,char* interface)
  * Scope:  Global
@@ -345,22 +365,4 @@ void sr_handlepacket(struct sr_instance* sr,
 
 }/* end sr_ForwardPacket */
 
-/*-------------------------------------------------------------------------
- * Method: sr_handlepacket_ip
- * Scope: Global
- * Hanldes ip packets
- *-------------------------------------------------------------------------*/
 
-void sr_handlepackets_ip(struct sr_instance* sr,
-	uint8_t * packet,
-	unsigned int len,
-	char* interface)
-{
- /*TODO: make sure its a valid ip  packet */
-	sr_ip_hdr_t* ip_header = (sr_ip_hdr_t*)(packet+sizeof(sr_ethernet_hdr_t));
-	if(ip_header->ip_sum != cksum(ip_header, ip_header->ip_hl * 4)|| len < sizeof(sr_ip_hdr_t) + sizeof(sr_ethernet_hdr_t) ) /*TODO: check packet length?*/
-		return;
-			
- /*TODO: handle */
-
-}
